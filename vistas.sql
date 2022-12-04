@@ -14,9 +14,9 @@ CREATE OR REPLACE VIEW historia_clinica AS (
 
 -- Ejemplo de extraer la historia clínica de un paciente
 
-SELECT fecha, hora, documento, odontologo, descripcion 
-FROM historia_clinica
-WHERE documento = '18895062';
+-- SELECT fecha, hora, documento, odontologo, descripcion 
+-- FROM historia_clinica
+-- WHERE documento = '18895062';
 
 -- VISTA 2
 -- Agenda de turnos
@@ -33,16 +33,16 @@ CREATE OR REPLACE VIEW agenda AS (
 
 -- Ejemplo de extraer la agenda de un odontólogo para un día en particular
 
-SELECT fecha, hora, paciente, documento, contacto 
-FROM agenda
-WHERE odontologo = 'Lillian'
-AND fecha = '2022-12-13';
+-- SELECT fecha, hora, paciente, documento, contacto 
+-- FROM agenda
+-- WHERE odontologo = 'Lillian'
+-- AND fecha = '2022-12-13';
 
 -- Ejemplo de extraer la agenda de un odontólogo para una semana en particular
 
-SELECT fecha, hora, paciente, documento, contacto FROM agenda
-WHERE odontologo = 'Lillian'
-AND WEEK(fecha) = 48;
+-- SELECT fecha, hora, paciente, documento, contacto FROM agenda
+-- WHERE odontologo = 'Lillian'
+-- AND WEEK(fecha) = 48;
 
 -- VISTA 3
 -- Agenda de turnos radiológicos
@@ -79,18 +79,18 @@ CREATE OR REPLACE VIEW performance AS (
 
 -- Ejemplo de la performance de un odontólogo en un dia en particular (u otro período de tiempo adaptando la consulta)
 
-SELECT tratamiento, SUM(cantidad) AS 'cantidad'
-FROM performance
-WHERE odontologo = 'Galarza'
-AND fecha = '2022-02-12'
-GROUP BY tratamiento;
+-- SELECT tratamiento, SUM(cantidad) AS 'cantidad'
+-- FROM performance
+-- WHERE odontologo = 'Galarza'
+-- AND fecha = '2022-02-12'
+-- GROUP BY tratamiento;
 
 -- Ejemplo de la performance del centro en un dia en particular
 
-SELECT tratamiento, SUM(cantidad) as 'cantidad'
-FROM performance
-WHERE fecha = '2022-02-12'
-GROUP BY tratamiento;
+-- SELECT tratamiento, SUM(cantidad) as 'cantidad'
+-- FROM performance
+-- WHERE fecha = '2022-02-12'
+-- GROUP BY tratamiento;
 
 -- VISTA 5
 -- Facturacion total de la clinica
@@ -107,24 +107,24 @@ CREATE OR REPLACE VIEW facturacion_clinica AS (
 
 -- Ejemplo de obtener la facturacion de un día en particular
 
-SELECT fecha, modo, SUM(facturacion) as 'facturacion'
-FROM facturacion_clinica
-WHERE fecha = '2022-02-12'
-GROUP BY modo;
+-- SELECT fecha, modo, SUM(facturacion) as 'facturacion'
+-- FROM facturacion_clinica
+-- WHERE fecha = '2022-02-12'
+-- GROUP BY modo;
 
 -- Ejemplo de obtener la facturacion de un mes en particular
 
-SELECT modo, SUM(facturacion) AS 'facturacion'
-FROM facturacion_clinica
-WHERE MONTH(fecha) = 2
-GROUP BY modo;
+-- SELECT modo, SUM(facturacion) AS 'facturacion'
+-- FROM facturacion_clinica
+-- WHERE MONTH(fecha) = 2
+-- GROUP BY modo;
 
 -- Ejemplo de obtener la facuracion de la clinica desglosada por tratamiento
 
-SELECT tratamiento, SUM(facturacion) AS 'facturacion'
-FROM facturacion_clinica
-WHERE MONTH(fecha) = 2
-GROUP BY tratamiento;
+-- SELECT tratamiento, SUM(facturacion) AS 'facturacion'
+-- FROM facturacion_clinica
+-- WHERE MONTH(fecha) = 2
+-- GROUP BY tratamiento;
 
 -- VISTA 6 
 -- Facturacion de un odontologo
@@ -141,16 +141,16 @@ CREATE OR REPLACE VIEW facturacion_odontologo AS (
 
 -- Ejemplo de obtener la facturacion de cada odontólogo en un mes
 
-SELECT profesional, SUM(facturacion) AS 'facturacion'
-FROM facturacion_odontologo
-WHERE MONTH(fecha) = 2
-GROUP BY profesional;
+-- SELECT profesional, SUM(facturacion) AS 'facturacion'
+-- FROM facturacion_odontologo
+-- WHERE MONTH(fecha) = 2
+-- GROUP BY profesional;
 
 -- Ejemplo de obtener la facturacion de un odontologo desglosado por tratamiento
 
-SELECT tratamiento, SUM(facturacion) AS 'facturacion'
-FROM facturacion_odontologo
-WHERE profesional = 'Galarza'
-GROUP BY tratamiento;
+-- SELECT tratamiento, SUM(facturacion) AS 'facturacion'
+-- FROM facturacion_odontologo
+-- WHERE profesional = 'Galarza'
+-- GROUP BY tratamiento;
 
 -- Este ultimo es facil de restringir para ver la facturacion desglosada en un período determinado
