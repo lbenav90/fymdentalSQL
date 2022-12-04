@@ -17,6 +17,7 @@ CREATE TABLE IF NOT EXISTS pacientes (
 CREATE TABLE IF NOT EXISTS tipo_de_empleado (
 	id_tipo_empleado 		INT 					NOT NULL UNIQUE AUTO_INCREMENT PRIMARY KEY,
     titulo 					VARCHAR(50) 			NOT NULL UNIQUE,
+    atiende					TINYINT		DEFAULT 1   NOT NULL,
     porcentaje_tratamiento 	TINYINT 	DEFAULT 40,
     porcentaje_laboratorio 	TINYINT		DEFAULT 50,
     lleva_monto_fijo 		TINYINT 	DEFAULT 0
@@ -74,18 +75,6 @@ CREATE TABLE IF NOT EXISTS turnos (
 		REFERENCES tratamientos (id_tratamiento)
 );
 
-CREATE TABLE IF NOT EXISTS facturacion (
-	id_factura 		INT 					  NOT NULL PRIMARY KEY AUTO_INCREMENT,
-    id_paciente 	INT 					  NOT NULL,
-    tipo 			TINYINT 				  NOT NULL,
-    valor_ideal 	DECIMAL(10,2) 			  NOT NULL,
-    valor_real 		DECIMAL(10,2),
-    numero_factura 	VARCHAR(14),
-    condicion_venta	TINYINT 		DEFAULT 0,
-    FOREIGN KEY (id_paciente)
-		REFERENCES pacientes (id_paciente)
-);
-
 CREATE TABLE IF NOT EXISTS trabajos_laboratorio (
 	id_trabajo_laboratorio 	INT 						NOT NULL UNIQUE PRIMARY KEY AUTO_INCREMENT,
     id_laboratorio 			INT 						NOT NULL,
@@ -96,13 +85,13 @@ CREATE TABLE IF NOT EXISTS trabajos_laboratorio (
 );
 
 CREATE TABLE IF NOT EXISTS evoluciones (
+	id_evolucion			INT 			NOT NULL UNIQUE PRIMARY KEY AUTO_INCREMENT,
 	descripcion 			VARCHAR(1000),
     id_tratamiento 			INT 			NOT NULL,
     id_turno 				INT				NOT NULL,
     id_paciente 			INT 			NOT NULL,
     id_empleado 			INT 			NOT NULL,
     id_trabajo_laboratorio 	INT,
-    id_factura 				INT,
     FOREIGN KEY (id_tratamiento)
 		REFERENCES tratamientos (id_tratamiento),
 	FOREIGN KEY (id_turno)
@@ -112,7 +101,22 @@ CREATE TABLE IF NOT EXISTS evoluciones (
 	FOREIGN KEY (id_empleado)
 		REFERENCES empleados (id_empleado),
 	FOREIGN KEY (id_trabajo_laboratorio)
-		REFERENCES trabajos_laboratorio (id_trabajo_laboratorio),
-	FOREIGN KEY (id_factura)
-		REFERENCES facturacion (id_factura)
+		REFERENCES trabajos_laboratorio (id_trabajo_laboratorio)
 );
+
+CREATE TABLE IF NOT EXISTS modo_pago (
+	id_modo_pago	INT 		NOT NULL UNIQUE PRIMARY KEY AUTO_INCREMENT,
+    modo			VARCHAR(50) NOT NULL UNIQUE
+);
+
+CREATE TABLE IF NOT EXISTS pagos (
+	fecha			DATE		  NOT NULL DEFAULT (CURDATE()),
+	id_evolucion	INT 		  NOT NULL,
+    monto			DECIMAL(10,2) NOT NULL,
+    id_modo_pago	INT 		  NOT NULL DEFAULT 1,
+    FOREIGN KEY (id_evolucion)
+		REFERENCES evoluciones (id_evolucion),
+	FOREIGN KEY (id_modo_pago) 
+		REFERENCES modo_pago (id_modo_pago)
+);
+
