@@ -130,8 +130,8 @@ CREATE OR REPLACE VIEW facturacion_clinica AS (
 -- Facturacion de un odontologo
 
 CREATE OR REPLACE VIEW facturacion_odontologo AS (
-	SELECT p.fecha, em.apellido AS 'profesional', tr.nombre AS 'tratamiento', SUM(p.monto) as 'facturacion'
-    FROM pagos P
+	SELECT p.fecha, em.apellido AS 'profesional', em.id_empleado, tr.nombre AS 'tratamiento', SUM(p.monto) as 'facturacion'
+    FROM pagos p
     JOIN evoluciones ev ON p.id_evolucion = ev.id_evolucion
     JOIN tratamientos tr ON ev.id_tratamiento = tr.id_tratamiento
     JOIN empleados em ON ev.id_empleado = em.id_empleado

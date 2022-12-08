@@ -5,8 +5,8 @@ INSERT INTO tipo_de_empleado
 VALUES 
 	('Socio'	    , 1, 70, 50, 0),
     ('Odontólogo'	, 1, 40, 50, 0),
-    ('Recepcionista', 0, 0,  0, 1),
-    ('Asistente'	, 0, 0,  0, 1);
+    ('Recepcionista', 0,  0,  0, 1),
+    ('Asistente'	, 0,  0,  0, 1);
     
 INSERT INTO modo_pago
 	(modo)
