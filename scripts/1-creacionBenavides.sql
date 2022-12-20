@@ -24,11 +24,12 @@ CREATE TABLE IF NOT EXISTS tipo_de_empleado (
 );
 
 CREATE TABLE IF NOT EXISTS tratamientos (
-	id_tratamiento 	INT 					NOT NULL UNIQUE AUTO_INCREMENT PRIMARY KEY,
-    nombre			VARCHAR(50) 			NOT NULL,
-    nomenclador 	VARCHAR(10) 			NOT NULL UNIQUE,
-    precio 			DECIMAL(10,2) 			NOT NULL,
-    monto_fijo 		DECIMAL(10,2) DEFAULT 0
+	id_tratamiento 			INT 						NOT NULL UNIQUE AUTO_INCREMENT PRIMARY KEY,
+    nombre					VARCHAR(50) 				NOT NULL,
+    nomenclador 			VARCHAR(10) 				NOT NULL UNIQUE,
+    precio 					DECIMAL(10,2) 				NOT NULL,
+    monto_fijo 				DECIMAL(10,2) 	DEFAULT 0,
+	trabajo_laboratorio		TINYINT			DEFAULT 0	NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS laboratorios (
@@ -77,7 +78,7 @@ CREATE TABLE IF NOT EXISTS turnos (
 
 CREATE TABLE IF NOT EXISTS trabajos_laboratorio (
 	id_trabajo_laboratorio 	INT 						NOT NULL UNIQUE PRIMARY KEY AUTO_INCREMENT,
-    id_laboratorio 			INT 						NOT NULL,
+    id_laboratorio 			INT,
     precio 					DECIMAL(10,2),
     estado 					TINYINT 		DEFAULT 0,
     FOREIGN KEY (id_laboratorio)
@@ -120,3 +121,6 @@ CREATE TABLE IF NOT EXISTS pagos (
 		REFERENCES modo_pago (id_modo_pago)
 );
 
+-- tabla de logs de pagos
+
+-- tabla de logs de evoluciones

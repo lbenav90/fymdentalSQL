@@ -62,3 +62,5 @@ BEGIN
 RETURN adicional;
 END$$
 DELIMITER ;
+
+-- Crear funcion que limpie un string de un telefono o un documento para dejarlo alfanumerico
