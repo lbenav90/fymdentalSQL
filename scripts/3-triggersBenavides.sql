@@ -64,13 +64,18 @@ DELIMITER ;
 DELIMITER $$
 
 CREATE TRIGGER `new_lab_work`
-AFTER INSERT ON `evoluciones`
+BEFORE INSERT ON `evoluciones`
 FOR EACH ROW
 BEGIN
-    SET laboratorio = (SELECT trabajo_laboratorio FROM tratamientos WHERE id_tratamiento = NEW.id_tratamiento);
+    SET @laboratorio = (SELECT trabajo_laboratorio FROM tratamientos WHERE id_tratamiento = NEW.id_tratamiento);
     
-    IF laboratorio = 1 THEN
-		CALL create_new_lab_work(NEW.id_evolucion);
+    IF @laboratorio = 1 THEN       
+         -- Este chequeo es por si se agrega una evolución con un trabajo de laboratorio ya asignado
+         IF NEW.id_trabajo_laboratorio IS NULL THEN
+			INSERT INTO trabajos_laboratorio (id_trabajo_laboratorio) VALUES (NULL);
+            SET NEW.id_trabajo_laboratorio = (SELECT MAX(id_trabajo_laboratorio) FROM trabajos_laboratorio);
+         END IF;
+         
     END IF;
 END$$
 

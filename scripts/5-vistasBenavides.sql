@@ -107,10 +107,10 @@ CREATE OR REPLACE VIEW facturacion_clinica AS (
 
 -- Ejemplo de obtener la facturacion de un día en particular
 
-SELECT fecha, modo, SUM(facturacion) as 'facturacion'
-FROM facturacion_clinica
-WHERE fecha = '2022-02-12'
-GROUP BY modo;
+-- SELECT fecha, modo, SUM(facturacion) as 'facturacion'
+-- FROM facturacion_clinica
+-- WHERE fecha = '2022-02-12'
+-- GROUP BY modo;
 
 -- Ejemplo de obtener la facturacion de un mes en particular
 
