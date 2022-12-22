@@ -5,8 +5,8 @@ DROP PROCEDURE IF EXISTS `create_new_lab_work`;
 DELIMITER $$
 
 -- Obtener una lista de emails. Lista de pacientes ordenada por un parametro de entrada
--- Las columnas de orden pueden ser nombre, apellido, documento, genero (0 femenino, 1 masculino), fecha_de_nacimiento y email
--- El segundo parámetro define si es ascendente o descendente. Poner ASC o DESC para elegir uno o el otro
+-- order_column es el nombre de la columna por la qeu se quiere ordenar. Puede ser nombre, apellido, documento, genero (0 femenino, 1 masculino), fecha_de_nacimiento y email
+-- El parámetro direction define si es ascendente o descendente. Poner ASC o DESC para elegir uno o el otro
 
 CREATE DEFINER=`root`@`localhost` PROCEDURE `lista_emails`(IN order_column VARCHAR(50), IN direction VARCHAR(4))
 BEGIN
@@ -22,7 +22,7 @@ BEGIN
     DEALLOCATE PREPARE runSQL;
 END$$
 
--- El siguiente Stored Procedure es llamado desde un trigger de la tabla evoluciones (aún no implementado)
+-- El siguiente Stored Procedure es llamado desde un trigger de la tabla evoluciones
 -- Frente a la inserción de una evolución que refiera a un tratamiento que tenga un valor de trabajo_laboratorio=1 (en la tabla tratamientos), se llama a este Procedure
 -- Este procedure hace un INSERT vacío en la tabla trabajos_laboratorio
 -- Luego hace un UPDATE de la fila de la tabla evoluciones que se insertó con el id_trabajo_laboratorio insertado antes.
@@ -30,7 +30,7 @@ END$$
 -- Para testearlo hay que agregar una nueva evolución, por ejemplo:
 -- INSERT INTO evoluciones (descripcion, id_tratamiento, id_turno, id_paciente, id_empleado) VALUES ('generico', 4, 1, 1, 1);
 -- Luego, llamar a Stored Procedure con el id_evolucion de la fila recien generada (si se usan solo los datos insertdos por script, el nuevo id es 115)
--- CALL fymdental.create_new_lab_work(115);
+-- CALL fymdental.create_new_lab_work(115) o el id_evolucion en el que se quiera agregar el trabajo de laboratorio;
 
 CREATE DEFINER=`root`@`localhost` PROCEDURE `create_new_lab_work`(IN evolucion_id INT)
 BEGIN

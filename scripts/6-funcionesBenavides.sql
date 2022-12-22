@@ -1,5 +1,10 @@
 USE fymdental;
 
+-- Esta función permite calcular los honorarios mensuales de un odontólogo en función de los tratamientos que realizó
+-- El parámetro id es la columna id_empleado de la tabla empleados, correspondiente al odontólogo particular
+-- El parámetro mes es el valor numérico del mes del año para el cual se desea calcular los honorarios
+-- Un ejemplo seria llamar SELECT honorario_mensual(1, 2);
+
 DELIMITER $$
 DROP FUNCTION IF EXISTS `honorario_mensual`$$
 CREATE DEFINER=`root`@`localhost` FUNCTION `honorario_mensual`(id INT, mes INT) 
@@ -30,10 +35,15 @@ BEGIN
 	JOIN turnos tu ON ev.id_turno = tu.id_turno
 	JOIN trabajos_laboratorio tl ON ev.id_trabajo_laboratorio = tl.id_trabajo_laboratorio
 	WHERE ev.id_empleado = id
-	AND month(tu.fecha) = mes;
+	AND MONTH(tu.fecha) = mes;
     
     RETURN (facturacion_mensual * porcentaje_tratamiento - laboratorios_mensual * porcentaje_laboratorio) / 100;
 END$$
+
+-- Esta función permite calcular los el adicional que cobran algunos empleados por ciertos tratamientos en un determinado mes
+-- El parámetro id es la columna id_empleado de la tabla empleados, correspondiente al odontólogo particular
+-- El parámetro mes es el valor numérico del mes del año para el cual se desea calcular los honorarios
+-- Un ejemplo seria llamar SELECT adicional_montos_fijos(13, 2);
 
 DROP FUNCTION IF EXISTS `adicional_montos_fijos`$$
 CREATE DEFINER=`root`@`localhost` FUNCTION `adicional_montos_fijos`(id INT, mes INT) 

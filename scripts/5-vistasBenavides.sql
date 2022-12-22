@@ -1,7 +1,7 @@
 USE fymdental;
 
 -- VISTA 1
--- Historia clínica de un paciente
+-- Nos permite ver la historia clínica de un paciente si se rstringe la vista por numero de documento (por ejemplo)
 
 CREATE OR REPLACE VIEW historia_clinica AS (
 	SELECT t.fecha, t.hora, p.documento, e.descripcion, em.apellido AS 'odontologo'
@@ -19,7 +19,7 @@ CREATE OR REPLACE VIEW historia_clinica AS (
 -- WHERE documento = '18895062';
 
 -- VISTA 2
--- Agenda de turnos
+-- Me permite ver la agenda de turnos de la clínica o de un ogontologo en particular
 
 CREATE OR REPLACE VIEW agenda AS (
 	SELECT tu.fecha, tu.hora, e.apellido AS 'odontologo', CONCAT(p.nombre, ' ', p.apellido) AS 'paciente', p.documento, p.celular AS 'contacto'
@@ -45,7 +45,7 @@ CREATE OR REPLACE VIEW agenda AS (
 -- AND WEEK(fecha) = 48;
 
 -- VISTA 3
--- Agenda de turnos radiológicos
+-- Me permite ver los turnos de la sección radiológica de la clínica
 
 CREATE OR REPLACE VIEW agenda_radiologica AS (
 	SELECT tu.fecha, tu.hora, CONCAT(p.nombre, ' ', p.apellido) AS 'paciente', p.documento, p.celular AS 'contacto', tr.nombre AS 'tratamiento'
@@ -61,7 +61,7 @@ CREATE OR REPLACE VIEW agenda_radiologica AS (
 -- Tambien se puede separar las agendas si hubera mas de un tipo de estudio radiológico
 
 -- VISTA 4
--- Tratamientos por odontólogo
+-- Me permite ver los tratamientos que realiza un odontólogo, para evaluar la perfomance
 
 CREATE OR REPLACE VIEW performance AS (
 	SELECT em.apellido AS 'odontologo', tr.nombre AS 'tratamiento', COUNT(ev.id_tratamiento) AS 'cantidad', tu.fecha
@@ -93,7 +93,7 @@ CREATE OR REPLACE VIEW performance AS (
 -- GROUP BY tratamiento;
 
 -- VISTA 5
--- Facturacion total de la clinica
+-- Me permite ver la facturación total de la clínica, separada por modo de pago 
 
 CREATE OR REPLACE VIEW facturacion_clinica AS (
 	SELECT p.fecha, mp.modo, tr.nombre AS 'tratamiento', SUM(p.monto) as 'facturacion'
@@ -107,10 +107,10 @@ CREATE OR REPLACE VIEW facturacion_clinica AS (
 
 -- Ejemplo de obtener la facturacion de un día en particular
 
--- SELECT fecha, modo, SUM(facturacion) as 'facturacion'
--- FROM facturacion_clinica
--- WHERE fecha = '2022-02-12'
--- GROUP BY modo;
+SELECT fecha, modo, SUM(facturacion) as 'facturacion'
+FROM facturacion_clinica
+WHERE fecha = '2022-02-12'
+GROUP BY modo;
 
 -- Ejemplo de obtener la facturacion de un mes en particular
 
@@ -127,7 +127,7 @@ CREATE OR REPLACE VIEW facturacion_clinica AS (
 -- GROUP BY tratamiento;
 
 -- VISTA 6 
--- Facturacion de un odontologo
+-- Me permite ver la facturación total de un odontólogo, separada por tipo de tratamiento
 
 CREATE OR REPLACE VIEW facturacion_odontologo AS (
 	SELECT p.fecha, em.apellido AS 'profesional', em.id_empleado, tr.nombre AS 'tratamiento', SUM(p.monto) as 'facturacion'
