@@ -5,7 +5,7 @@ USE fymdental;
 CREATE TABLE IF NOT EXISTS tipo_de_empleado (
     id_tipo_empleado INT NOT NULL UNIQUE AUTO_INCREMENT PRIMARY KEY,
     titulo VARCHAR(50) NOT NULL UNIQUE,
-    atiende	TINYINT	NOT NULL DEFAULT 1,
+    atiende TINYINT NOT NULL DEFAULT 1,
     porcentaje_tratamiento TINYINT UNSIGNED NOT NULL DEFAULT 40, 	-- Porcentaje del precio que se lleva el odontólogo
     porcentaje_laboratorio TINYINT UNSIGNED NOT NULL DEFAULT 50, 	-- Porcentaje del costo de laboratorio que asume en odontólogo
     lleva_monto_fijo TINYINT NOT NULL DEFAULT 0 			-- Si este tipo de empleado cobra montos fijos para los tratamientos que los tienen
