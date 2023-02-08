@@ -5,19 +5,20 @@ USE fymdental;
 CREATE TABLE IF NOT EXISTS tipo_de_empleado (
 	id_tipo_empleado INT NOT NULL UNIQUE AUTO_INCREMENT PRIMARY KEY,
     titulo VARCHAR(50) NOT NULL UNIQUE,
-    atiende	TINYINT	NOT NULL DEFAULT 1 ,
-    porcentaje_tratamiento TINYINT NOT NULL DEFAULT 40,
-    porcentaje_laboratorio TINYINT NOT NULL DEFAULT 50,
-    lleva_monto_fijo TINYINT NOT NULL DEFAULT 0
+    atiende	TINYINT	NOT NULL DEFAULT 1,
+    porcentaje_tratamiento TINYINT UNSIGNED NOT NULL DEFAULT 40, -- Porcentaje del precio que se lleva el odontólogo
+    porcentaje_laboratorio TINYINT UNSIGNED NOT NULL DEFAULT 50, -- Porcentaje del costo de laboratorio que asume en odontólogo
+    lleva_monto_fijo TINYINT NOT NULL DEFAULT 0 -- Si este tipo de empleado cobra montos fijos para los tratamientos que los tienen
 );
 
 CREATE TABLE IF NOT EXISTS tratamientos (
 	id_tratamiento INT NOT NULL UNIQUE AUTO_INCREMENT PRIMARY KEY,
     nombre VARCHAR(50) NOT NULL,
-    nomenclador VARCHAR(10) NOT NULL UNIQUE,
+    nomenclador VARCHAR(10) NOT NULL UNIQUE, -- Código único para tratamientos reconocidos, Se puede modificar en funcion del código utilizado
     precio DECIMAL(10,2) NOT NULL,
     monto_fijo DECIMAL(10,2) NOT NULL DEFAULT 0,
-	trabajo_laboratorio	TINYINT NOT NULL DEFAULT 0
+	trabajo_laboratorio	TINYINT NOT NULL DEFAULT 0,
+    solo_odontologos TINYINT NOT NULL DEFAULT 1 -- Indica si el tratamiento lo pueden realizar sólo odontólogos o cualquier empleado
 );
 
 CREATE TABLE IF NOT EXISTS laboratorios (
@@ -37,17 +38,17 @@ CREATE TABLE IF NOT EXISTS modo_pago (
 
 CREATE TABLE IF NOT EXISTS generos (
 	id_genero INT NOT NULL UNIQUE AUTO_INCREMENT PRIMARY KEY,
-    genero VARCHAR(50) UNIQUE
+    genero VARCHAR(50) NOT NULL UNIQUE
 );
 
 CREATE TABLE IF NOT EXISTS estado_turno (
 	id_estado_turno INT NOT NULL UNIQUE AUTO_INCREMENT PRIMARY KEY,
-    estado VARCHAR(20) UNIQUE
+    estado VARCHAR(20) NOT NULL UNIQUE
 );
 
 CREATE TABLE IF NOT EXISTS estado_trabajo_laboratorio (
 	id_estado_trabajo_laboratorio INT NOT NULL UNIQUE AUTO_INCREMENT PRIMARY KEY,
-    estado VARCHAR(20) UNIQUE
+    estado VARCHAR(20) NOT NULL UNIQUE
 );
 
 CREATE TABLE IF NOT EXISTS pacientes (
@@ -82,14 +83,26 @@ CREATE TABLE IF NOT EXISTS empleados (
 		REFERENCES tipo_de_empleado (id_tipo_empleado)	
 );
 
+CREATE TABLE IF NOT EXISTS honorarios_definitivos(
+    fecha_definicion DATE NOT NULL DEFAULT (CURDATE()),
+    usuario VARCHAR(50) NOT NULL, -- Se ingresa solo en un trigger
+    id_empleado INT NOT NULL,
+    honorario DECIMAL(10, 2) NOT NULL,
+    mes INT NOT NULL,
+    anio INT NOT NULL,
+    FOREIGN KEY (id_empleado)
+		REFERENCES empleados (id_empleado),
+	PRIMARY KEY (id_empleado, mes, anio) -- No puede haber dos honorarios del mismo mes para un mismo odontólogo
+);
+
 CREATE TABLE IF NOT EXISTS turnos (
 	id_turno INT NOT NULL UNIQUE AUTO_INCREMENT PRIMARY KEY,
     fecha DATE NOT NULL,
     hora TIME NOT NULL,
     id_estado_turno INT NOT NULL DEFAULT 2,
     id_paciente INT NOT NULL,
-    id_empleado INT,
-    id_tratamiento INT,
+    id_empleado INT, -- Esta columna tiene valor si es un turno con un odontólogo. Trigger para controlar que sea odontólogo
+    id_tratamiento INT, -- Esta columna tiene valor si es un turno radiológico. Trigger para controlar que sea un tratamiento que permite no odontólogos
     FOREIGN KEY (id_estado_turno) 
 		REFERENCES estado_turno (id_estado_turno),
     FOREIGN KEY (id_paciente) 
@@ -116,15 +129,12 @@ CREATE TABLE IF NOT EXISTS evoluciones (
     id_tratamiento INT NOT NULL,
     descripcion VARCHAR(1000),
     id_turno INT NOT NULL,
-    id_paciente INT NOT NULL,
-    id_empleado INT NOT NULL,
+    id_empleado INT NOT NULL, -- Parece redundante con el id_empleado en el turno, pero puede no ateneder el mismo al que se al asigna el turno
     id_trabajo_laboratorio INT,
     FOREIGN KEY (id_tratamiento)
 		REFERENCES tratamientos (id_tratamiento),
 	FOREIGN KEY (id_turno)
 		REFERENCES turnos (id_turno),
-    FOREIGN KEY (id_paciente)
-		REFERENCES pacientes (id_paciente),
 	FOREIGN KEY (id_empleado)
 		REFERENCES empleados (id_empleado),
 	FOREIGN KEY (id_trabajo_laboratorio)
@@ -148,7 +158,7 @@ CREATE TABLE IF NOT EXISTS log_pagos (
     fecha DATE NOT NULL DEFAULT (CURDATE()),
     hora TIME NOT NULL DEFAULT (CURTIME()),
     evento VARCHAR(20) NOT NULL,
-    objetivo INT NOT NULL,
+    objetivo INT NOT NULL, -- id del pago sobre el que se realiza el log
     usuario VARCHAR(50)	NOT NULL,
     FOREIGN KEY (objetivo)
 		REFERENCES pagos (id_pago)
@@ -156,18 +166,18 @@ CREATE TABLE IF NOT EXISTS log_pagos (
 
 CREATE TABLE IF NOT EXISTS pagos_audit (
 	id_changed_log INT NOT NULL,
-    old_row	VARCHAR(3000) NOT NULL,
-    new_row	VARCHAR(3000) NOT NULL,
+    old_row	VARCHAR(3000) NOT NULL, -- String con los datos viejos
+    new_row	VARCHAR(3000) NOT NULL, -- String con los datos nuevos
     FOREIGN KEY (id_changed_log)
 		REFERENCES log_pagos (id_log_pagos)
 );
 
 CREATE TABLE IF NOT EXISTS log_evoluciones (
-	id_log_evoluciones INT NOT NULL UNIQUE AUTO_INCREMENT PRIMARY KEY ,
+	id_log_evoluciones INT NOT NULL UNIQUE AUTO_INCREMENT PRIMARY KEY,
     fecha DATE NOT NULL DEFAULT (CURDATE()),
     hora TIME NOT NULL DEFAULT (CURTIME()),
     evento VARCHAR(20) NOT NULL,
-    objetivo INT NOT NULL,
+    objetivo INT NOT NULL, -- id de la evolucion sobra la que que se realiza el log
     usuario VARCHAR(50)	NOT NULL,
     FOREIGN KEY (objetivo)
 		REFERENCES evoluciones (id_evolucion)
@@ -175,20 +185,230 @@ CREATE TABLE IF NOT EXISTS log_evoluciones (
 
 CREATE TABLE IF NOT EXISTS evoluciones_audit (
 	id_changed_log INT NOT NULL,
-    old_row VARCHAR(3000) NOT NULL,
-    new_row VARCHAR(3000) NOT NULL,
+    old_row VARCHAR(3000) NOT NULL, -- String con los datos viejos
+    new_row VARCHAR(3000) NOT NULL, -- String con los datos nuevos
     FOREIGN KEY (id_changed_log)
 		REFERENCES log_evoluciones (id_log_evoluciones)
 );
 
+CREATE TABLE IF NOT EXISTS stock (
+	id_producto INT NOT NULL UNIQUE AUTO_INCREMENT PRIMARY KEY,
+    nombre VARCHAR(100) NOT NULL,
+    cantidad INT UNSIGNED NOT NULL, -- Cantidad actual
+    cantidad_minima INT UNSIGNED NOT NULL DEFAULT 1, -- Mínima cantidad para ser considerado de bajo stock
+    cantidad_recomendada INT UNSIGNED, -- Cantidad recomendada para realizar pedidos
+    presentacion VARCHAR(50) NOT NULL,
+    variedad VARCHAR(50),
+    ubicacion VARCHAR(50)
+);
+
+CREATE TABLE IF NOT EXISTS proveedores (
+	id_proveedor INT NOT NULL UNIQUE AUTO_INCREMENT PRIMARY KEY,
+    nombre VARCHAR(50) NOT NULL,
+    telefono VARCHAR(20) NOT NULL,
+    direccion VARCHAR(255),
+    email VARCHAR(50),
+    url VARCHAR(100),
+    cuit VARCHAR(11) UNIQUE,
+    activo TINYINT DEFAULT 1
+);
+
+CREATE TABLE IF NOT EXISTS consumos_stock (
+	id_consumo INT NOT NULL UNIQUE AUTO_INCREMENT PRIMARY KEY,
+    fecha DATE NOT NULL DEFAULT (CURDATE()),
+    hora TIME NOT NULL DEFAULT (CURTIME()),
+    id_producto INT NOT NULL,
+    cantidad INT UNSIGNED NOT NULL,
+    id_empleado_retira INT NOT NULL, -- Quien lo retira del stock
+    id_empleado_utiliza INT NOT NULL, -- Quien lo utiliza. Se destinan a consultorios, asique este deberían ser odontólogos
+    FOREIGN KEY (id_producto)
+		REFERENCES stock (id_producto),
+	FOREIGN KEY (id_empleado_retira)
+		REFERENCES empleados (id_empleado),
+	FOREIGN KEY (id_empleado_utiliza)
+		REFERENCES empleados (id_empleado)
+);
+
+CREATE TABLE IF NOT EXISTS estado_pedido (
+	id_estado_pedido INT NOT NULL UNIQUE AUTO_INCREMENT PRIMARY KEY,
+    estado VARCHAR(20) NOT NULL UNIQUE
+);
+
+CREATE TABLE IF NOT EXISTS pedidos_stock (
+	id_pedido INT NOT NULL UNIQUE AUTO_INCREMENT PRIMARY KEY,
+    id_proveedor INT NOT NULL,
+    fecha_ingreso DATE NOT NULL DEFAULT (CURDATE()),
+    precio_total DECIMAL(10,2),
+    id_estado_pedido INT,
+	id_empleado_recibe INT,
+    id_empleado_controla INT,
+    FOREIGN KEY (id_proveedor)
+		REFERENCES proveedores (id_proveedor),
+	FOREIGN KEY (id_estado_pedido)
+		REFERENCES estado_pedido (id_estado_pedido),
+	FOREIGN KEY (id_empleado_recibe)
+		REFERENCES empleados (id_empleado),
+	FOREIGN KEY (id_empleado_controla)
+		REFERENCES empleados (id_empleado)
+);
+
+CREATE TABLE IF NOT EXISTS ingresos_stock (
+	id_ingreso INT NOT NULL UNIQUE AUTO_INCREMENT PRIMARY KEY,
+    id_pedido INT NOT NULL,
+    id_producto INT NOT NULL,
+    cantidad_ingresada INT UNSIGNED NOT NULL,
+    FOREIGN KEY (id_pedido)
+		REFERENCES pedidos_stock (id_pedido),
+	FOREIGN KEY (id_producto)
+		REFERENCES stock (id_producto)
+);
+
 -- STORED PROCEDURES --
+DELIMITER $$
+
+-- El siguiente procedimiento permite obtener los porcentajes que aplican a un determinado odontólogo
+-- Toma como INPUT el id del odontólogo de interés y posee dos parámetros de OUTPUT, el porcentaje del tratamiento que se lleva el odontólogo
+-- y el porcentaje del valor del trabajo de laboratorio que le corresponde deducir de la facturación.
+-- Es llamado por la función 'honorario_mensual'
+
+CREATE PROCEDURE obtener_porcentajes (IN id_odontologo INT, OUT porcentaje_tratamiento INT, OUT porcentaje_laboratorio INT)
+BEGIN
+	SELECT te.porcentaje_tratamiento, te.porcentaje_laboratorio INTO porcentaje_tratamiento, porcentaje_laboratorio
+	FROM empleados e
+	JOIN tipo_de_empleado te ON e.id_tipo_empleado = te.id_tipo_empleado
+	WHERE e.id_empleado = id_odontologo;
+END$$
+
+-- El siguiente procedimiento permite obtener la facturación mensual de un odontólogo en un mes
+-- Toma como INPUT el id del odontólogo y dos INT que corresponden al 'mes' y 'anio' de interes.
+-- Genera un OUTPUT con la facturación del mes del odontólogo
+-- Es llamado por la función 'honorario_mensual'
+
+CREATE PROCEDURE obtener_facturacion_mensual (IN id_odontologo INT, IN mes INT, IN anio INT, OUT facturacion_mensual DECIMAL(10,2))
+BEGIN
+	-- Utilizo una vista generada más abajo
+	SELECT SUM(facturacion) INTO facturacion_mensual
+    FROM facturacion_odontologo
+	WHERE id_empleado = id_odontologo
+	AND MONTH(fecha) = mes
+    AND YEAR(fecha) = anio;
+END$$
+
+-- El siguiente procedimiento permite obtener el costo de los trabajos de laboratorio de un odontólogo en un mes
+-- Toma como INPUT el id del odontólogo y dos INT que corresponden al 'mes' y 'anio' de interes.
+-- Genera un OUTPUT con el costo de laboratorio del mes del odontólogo
+-- Es llamado por la función 'honorario_mensual'
+
+CREATE PROCEDURE obtener_costo_laboratorio (IN id_odontologo INT, IN mes INT, IN anio INT, OUT laboratorios_mensual DECIMAL(10,2))
+BEGIN
+	DECLARE check_null INT;
+    
+    -- Esta primera query me permite chequear si alguno de los precios que voy a sumar es NULL
+    SELECT SUM(ISNULL(tl.precio)) INTO check_null
+    FROM evoluciones ev 
+	JOIN turnos tu ON ev.id_turno = tu.id_turno
+	JOIN trabajos_laboratorio tl ON ev.id_trabajo_laboratorio = tl.id_trabajo_laboratorio
+	WHERE ev.id_empleado = id_odontologo
+	AND MONTH(tu.fecha) = mes
+    AND YEAR(tu.fecha) = anio;
+    
+    -- Si algun precio es NULL, tira un error para que lo ingresen. Así evita olvidos de ingresar valores de trabajos de laboratorio
+    IF check_null <> 0 THEN
+		SIGNAL SQLSTATE '45000'
+        SET MESSAGE_TEXT = 'Al menos uno de los precios de los trabajos del mes no tiene un valor asignado';
+    END IF;
+    
+	SELECT SUM(tl.precio) INTO laboratorios_mensual
+    FROM evoluciones ev 
+	JOIN turnos tu ON ev.id_turno = tu.id_turno
+	JOIN trabajos_laboratorio tl ON ev.id_trabajo_laboratorio = tl.id_trabajo_laboratorio
+	WHERE ev.id_empleado = id_odontologo
+	AND MONTH(tu.fecha) = mes
+    AND YEAR(tu.fecha) = anio;
+END$$
+
+-- El siguiente procedimiento permite obtener la condicion de un empleado frente a los montos fijos de un tratamiento
+-- Toma como INPUT el id del profesional de interés y como OUTPUT un booleano indicando si el profesional cobra o no los montos fijos
+-- Es llamado por la función 'adicional_monto_fijo
+
+CREATE PROCEDURE obtener_estado_monto_fijo (IN id_asistente INT, OUT cobra_monto_fijo TINYINT)
+BEGIN
+	SELECT te.lleva_monto_fijo INTO cobra_monto_fijo
+    FROM empleados em
+    JOIN tipo_de_empleado te ON em.id_tipo_empleado = te.id_tipo_empleado
+    WHERE em.id_empleado = id_asistente;
+END$$
+
+-- El siguiente procedimiento calcula el adicional mensual al sueldo que cobra un empleado.
+-- Lo calcula a partir de los pagos realizados en un mes, no las evoluciones. Como se puede hacer más de un pago por cada evolución, 
+-- se toma el cuidado de agrupar por evolución, por lo que se debe usar esta sintaxis y no sumar directamente en la consulta interna
+-- Toma como INPUT el id del profesional y dos INT que corresponden al 'mes' y al 'anio'.
+-- Genera un OUTPUT con el adicional del mes del profesional
+-- Es llamado por la función 'adicional_montos_fijos"
+
+CREATE PROCEDURE obtener_adicional (IN id_asistente INT, IN mes INT, IN anio INT, OUT adicional DECIMAL (10,2))
+BEGIN
+	SELECT SUM(montos.monto_fijo) INTO adicional
+	FROM (
+		SELECT tr.monto_fijo
+		FROM pagos p
+		JOIN evoluciones ev ON p.id_evolucion = ev.id_evolucion
+		JOIN tratamientos tr ON ev.id_tratamiento = tr.id_tratamiento
+		WHERE ev.id_empleado = id_asistente
+		AND MONTH(p.fecha) = mes
+        AND YEAR(p.fecha) = anio
+		GROUP BY ev.id_evolucion -- Por si hay más de un pago por evolucion, que no cuente doble
+    ) AS montos;
+END$$
+
+-- Este procedimiento permite obtener una lista de empleados con sus honorarios por el mes. Para empelados que no atienden, corresponde a los adicionales sobre el sueldo.
+-- Los parámetros 'mes' y 'anio' es la representación numérica de la fecha para la que se desea realizar el cálculo. 
+-- El parámetro 'atiende' es 0 o 1 si el empleado es odontólogo o no.
+-- El último parámetro 'definitivo' es un booleano que indica si la facturacion que se calcula es definitiva. Si lo es, se agrega a la tabla honorarios_definitivos 
+-- y no permite llamar más al procedimiento para la combinacion año-mes
+
+-- La tabla honorarios_definitivos tiene ingresados ya los honorarios para los meses febrero, abril y junio.
+-- Dejé el mes de septiembre sin generarr honorarios definitivos para testear esto en la correccion. Los meses de noviembre y diciembre tienen solo turnos futuros
+-- Para testear este procedimiento, llamar CALL honorarios(9, 2022, 1, 1); CALL honorarios(9, 2022, 0, 1);
+
+CREATE PROCEDURE honorarios (IN mes INT, IN anio INT, IN atiende TINYINT, IN definitivo TINYINT)
+BEGIN
+	-- Dependiendo de si quiero honorarios de odontólogos o de otros empleados, debo cambiar la función que llama más adelante
+	IF atiende = 1 THEN
+		SET @function_call = 'honorario_mensual';
+        SET @nombre = 'honorarios';
+	ELSEIF atiende = 0 THEN
+		SET @function_call = 'adicional_montos_fijos';
+        SET @nombre = 'montos_fijos';
+	ELSE
+		SIGNAL SQLSTATE '45000'
+        SET MESSAGE_TEXT = 'Valor inválido para "atiende". Debe ser 1 o 0 para odontólogos u otos, respectivamente.';
+    END IF;
+
+	-- Esta query es la que el usuario ve
+	SET @clause = CONCAT('SELECT e.nombre, e.apellido, ', @function_call, '(e.id_empleado, ', mes, ', ', anio, ') as "', @nombre, '" ');
+    SET @clause = CONCAT(@clause ,'FROM empleados e JOIN tipo_de_empleado te ON e.id_tipo_empleado=te.id_tipo_empleado WHERE e.activo = 1 AND te.atiende = ', atiende, ';');
+    PREPARE runSQL FROM @clause;
+    EXECUTE runSQL;
+    DEALLOCATE PREPARE runSQL;
+    
+    -- Si determinó que los honorarios son definitivos, inserta en la table honorarios_definitivos 
+    -- Utiliza una query similar a la anterior como subconsulta
+    IF definitivo = 1 THEN
+		SET @insert_clause = CONCAT('INSERT INTO honorarios_definitivos (id_empleado, mes, anio, honorario) ');
+		SET @insert_clause = CONCAT(@insert_clause, 'SELECT e.id_empleado, ', mes, ', ', anio, ', ', @function_call, '(e.id_empleado, ', mes, ', ', anio, ') as "', @nombre, '" ');
+		SET @insert_clause = CONCAT(@insert_clause ,'FROM empleados e JOIN tipo_de_empleado te ON e.id_tipo_empleado=te.id_tipo_empleado WHERE e.activo=1 AND te.atiende=', atiende, ';');
+        PREPARE runSQLInsert FROM @insert_clause;
+        EXECUTE runSQLInsert;
+        DEALLOCATE PREPARE runSQLInsert;
+	END IF;
+END$$
 
 -- Obtener una lista de emails. Lista de pacientes ordenada por un parametro de entrada
 -- order_column es el nombre de la columna por la qeu se quiere ordenar. Puede ser nombre, apellido, documento, genero (0 femenino, 1 masculino), fecha_de_nacimiento y email
 -- El parámetro direction define si es ascendente o descendente. Poner ASC o DESC para elegir uno o el otro
 
-DELIMITER $$
-CREATE DEFINER=`root`@`localhost` PROCEDURE `lista_emails` (IN order_column VARCHAR(50), IN direction VARCHAR(4))
+CREATE PROCEDURE lista_emails (IN order_column VARCHAR(50), IN direction VARCHAR(4))
 BEGIN
 	IF order_column <> '' THEN
 		SET @order_clause = CONCAT('ORDER BY ', order_column, ' ', direction);
@@ -196,7 +416,8 @@ BEGIN
 		SET @order_clause = '';
     END IF;
     
-    SET @clause = CONCAT('SELECT p.nombre, p.apellido, p.documento, g.genero, p.fecha_de_nacimiento, p.email FROM pacientes p JOIN generos g ON p.id_genero = g.id_genero ', @order_clause);
+    SET @clause = CONCAT('SELECT p.nombre, p.apellido, p.documento, g.genero, p.fecha_de_nacimiento, p.email');
+    SET @clause = CONCAT(@clause, 'FROM pacientes p JOIN generos g ON p.id_genero = g.id_genero', @order_clause);
     PREPARE runSQL FROM @clause;
     EXECUTE runSQL;
     DEALLOCATE PREPARE runSQL;
@@ -206,7 +427,7 @@ END$$
 -- porcentaje_aumento es un INT. Si quiero aumentar un 10% los precios, ingreso 10
 -- aplicar_a_monto_fijo puede valer 0 o 1, y representa si se debe aplicar el aumento a la columna monto_fijo
 
-CREATE PROCEDURE `aumentar_precios` (IN porcentaje_aumento INT, aplicar_a_monto_fijo TINYINT)
+CREATE PROCEDURE aumentar_precios (IN porcentaje_aumento INT, aplicar_a_monto_fijo TINYINT)
 BEGIN
 	DECLARE i, m, n, row_id INT;
     DECLARE old_price, old_fixed DECIMAL(10,2);
@@ -219,6 +440,8 @@ BEGIN
 	SET i = 1;
     SELECT COUNT(*) INTO n FROM tratamientos;
     
+    -- Hago un loop sobre todos los tratamientos aumentando el precio
+    -- No es necesario que los id_tratamientos sean consecutivos
     WHILE i <= n DO
 		SET m = i - 1;
 		SELECT id_tratamiento, precio, monto_fijo INTO row_id, old_price, old_fixed FROM tratamientos LIMIT m, 1;
@@ -236,7 +459,6 @@ BEGIN
         
         SET i = i + 1;
 	END WHILE;
-
 END$$
 
 DELIMITER ;
@@ -245,17 +467,17 @@ DELIMITER ;
 
 -- Frente a una inserción en la tabla pagos, este trigger agrega un log en la tabla log_pagos
 
-CREATE TRIGGER `generar_log_pago_insert`
-AFTER INSERT ON `pagos`
+CREATE TRIGGER generar_log_pago_insert
+AFTER INSERT ON pagos
 FOR EACH ROW
-INSERT INTO `log_pagos` (evento, objetivo, usuario) VALUES ('INSERT', NEW.id_pago, USER());
+INSERT INTO log_pagos (evento, objetivo, usuario) VALUES ('INSERT', NEW.id_pago, USER());
 
 -- Frente a la modificación de una fila en la tabla pagos, este trigger agrega un log en la tabla log_pagos
 -- También agrega una fila en pagos_audit que registra los cambios que se producen
 
 DELIMITER $$
-CREATE TRIGGER `generar_log_pago_update`
-AFTER UPDATE ON `pagos`
+CREATE TRIGGER generar_log_pago_update
+AFTER UPDATE ON pagos
 FOR EACH ROW
 BEGIN
 	INSERT INTO log_pagos (evento, objetivo, usuario) VALUES ('UPDATE', NEW.id_pago, USER());
@@ -270,7 +492,7 @@ DELIMITER ;
 
 -- Frente a una inserción en la tabla pagos, este trigger agrega un log en la tabla log_pagos
 
-CREATE TRIGGER `generar_log_evolucion_insert`
+CREATE TRIGGER generar_log_evolucion_insert
 AFTER INSERT ON evoluciones
 FOR EACH ROW
 INSERT INTO log_evoluciones (evento, objetivo, usuario) VALUES ('INSERT', NEW.id_evolucion, USER());
@@ -279,39 +501,39 @@ INSERT INTO log_evoluciones (evento, objetivo, usuario) VALUES ('INSERT', NEW.id
 -- También agrega una fila en evoluciones_audit que registra los cambios que se producen
 
 DELIMITER $$
-CREATE TRIGGER `generar_log_evolucion_update`
+
+CREATE TRIGGER generar_log_evolucion_update
 AFTER UPDATE ON evoluciones
 FOR EACH ROW
 BEGIN
 	INSERT INTO log_evoluciones (evento, objetivo, usuario) VALUES ('UPDATE', NEW.id_evolucion, USER());
-    IF (NOT(OLD.id_trabajo_laboratorio IS NULL AND NEW.id_trabajo_laboratorio IS NOT NULL)) THEN
-		INSERT INTO evoluciones_audit (id_changed_log, old_row, new_row)
-		VALUES (
-			(SELECT MAX(id_log_evoluciones) FROM log_evoluciones),
-			CONCAT(OLD.id_evolucion, ' ', OLD.descripcion, ' ', OLD.id_tratamiento, ' ', OLD.id_turno, ' ', OLD.id_paciente, ' ', OLD.id_empleado, ' ', IF(OLD.id_trabajo_laboratorio IS NULL,'', OLD.id_trabajo_laboratorio)),
-            CONCAT(NEW.id_evolucion, ' ', NEW.descripcion, ' ', NEW.id_tratamiento, ' ', NEW.id_turno, ' ', NEW.id_paciente, ' ', NEW.id_empleado, ' ', IF(NEW.id_trabajo_laboratorio IS NULL,'', NEW.id_trabajo_laboratorio))
-		);
-    END IF;
+
+	INSERT INTO evoluciones_audit (id_changed_log, old_row, new_row)
+	VALUES (
+		(SELECT MAX(id_log_evoluciones) FROM log_evoluciones),
+		CONCAT(OLD.id_evolucion, ' ', OLD.descripcion, ' ', OLD.id_tratamiento, ' ', OLD.id_turno, ' ', OLD.id_empleado, ' ', IF(OLD.id_trabajo_laboratorio IS NULL,'', OLD.id_trabajo_laboratorio)),
+		CONCAT(NEW.id_evolucion, ' ', NEW.descripcion, ' ', NEW.id_tratamiento, ' ', NEW.id_turno, ' ', NEW.id_empleado, ' ', IF(NEW.id_trabajo_laboratorio IS NULL,'', NEW.id_trabajo_laboratorio))
+	);
 END$$
-DELIMITER ;
 
 -- Trigger que al agregar una evolucion con un tratamiento que tenga el parametro trabajo_laboratorio = 1, llama al stored procedure create_new_lab_work 
 -- Este crea el nuevo trabajo de laboratorio y actualiza la evolucion con el id que acaba de crear
 
-DELIMITER $$
-CREATE TRIGGER `new_lab_work`
-BEFORE INSERT ON `evoluciones`
+CREATE TRIGGER new_lab_work
+BEFORE INSERT ON evoluciones
 FOR EACH ROW
 BEGIN
-    SET @laboratorio = (SELECT trabajo_laboratorio FROM tratamientos WHERE id_tratamiento = NEW.id_tratamiento);
+	DECLARE laboratorio TINYINT;
     
-    IF @laboratorio = 1 THEN       
-         IF NEW.id_trabajo_laboratorio IS NULL THEN
-			-- Este chequeo es por si se agrega una evolución con un trabajo de laboratorio ya asignado
-			INSERT INTO trabajos_laboratorio (id_trabajo_laboratorio) VALUES (NULL);
-            SET NEW.id_trabajo_laboratorio = (SELECT MAX(id_trabajo_laboratorio) FROM trabajos_laboratorio);
-         END IF;
-         
+    -- Busco si al tratamiento de la evolución le corresponde un trabajo de laboratorio
+    SELECT trabajo_laboratorio INTO laboratorio 
+    FROM tratamientos 
+    WHERE id_tratamiento = NEW.id_tratamiento;
+    
+    IF laboratorio AND NEW.id_trabajo_laboratorio IS NULL THEN
+		-- El segundo chequeo es por si se agrega una evolución con un trabajo de laboratorio ya asignado
+		INSERT INTO trabajos_laboratorio (id_trabajo_laboratorio) VALUES (NULL);
+		SET NEW.id_trabajo_laboratorio = (SELECT MAX(id_trabajo_laboratorio) FROM trabajos_laboratorio);
     END IF;
 END$$
 
@@ -321,16 +543,23 @@ CREATE TRIGGER validar_datos_paciente_insert
 BEFORE INSERT ON pacientes
 FOR EACH ROW
 BEGIN 
+	DECLARE mensaje VARCHAR(800);
+
+	-- Chequeo que me den al menos un teléfono de contacto
 	IF NEW.celular IS NULL AND NEW.telefono IS NULL THEN
+		SET mensaje = CONCAT('Error en el paciente ', NEW.nombre, ' ', NEW.apellido, '. Debe proveer al menos un telefono de contacto');
 		SIGNAL SQLSTATE '45000'
-        SET MESSAGE_TEXT = 'Debe proveer al menos un telefono de contacto';
+        SET MESSAGE_TEXT = mensaje;
     END IF;
     
-	IF validar_email(NEW.email) = 0 THEN
+    -- Valido la estructura del email con una función definida más abajo
+	IF NEW.email IS NOT NULL AND NOT validar_email(NEW.email) THEN
+		SET mensaje = CONCAT('Error en el paciente ', NEW.nombre, ' ', NEW.apellido, '. Email inválido');
 		SIGNAL SQLSTATE '45000'
-        SET MESSAGE_TEXT = 'Formato de email inválido';
+        SET MESSAGE_TEXT = mensaje;
 	END IF;
 
+	-- Limpio los strings numéricos para remover caracteres innecesarios
 	SET NEW.documento = limpiar_string(NEW.documento);
     SET NEW.telefono = limpiar_string(NEW.telefono);
     SET NEW.celular = limpiar_string(NEW.celular);
@@ -340,16 +569,23 @@ CREATE TRIGGER validar_datos_paciente_update
 BEFORE UPDATE ON pacientes
 FOR EACH ROW
 BEGIN 
+	DECLARE mensaje VARCHAR (800);
+    
+	-- Chequeo que me den al menos un teléfono de contacto
 	IF NEW.celular IS NULL AND NEW.telefono IS NULL THEN
+		SET mensaje = CONCAT('Error en el paciente ', NEW.nombre, ' ', NEW.apellido, '. Debe proveer al menos un telefono de contacto');
 		SIGNAL SQLSTATE '45000'
-        SET MESSAGE_TEXT = 'Debe proveer al menos un telefono de contacto';
+        SET MESSAGE_TEXT = mensaje;
     END IF;
     
-	IF validar_email(NEW.email) = 0 THEN
+	-- Valido la estructura del email con una función definida más abajo
+	IF NEW.email IS NOT NULL AND NOT validar_email(NEW.email) THEN
+		SET mensaje = CONCAT('Error en el paciente ', NEW.nombre, ' ', NEW.apellido, '. Email inválido');
 		SIGNAL SQLSTATE '45000'
         SET MESSAGE_TEXT = 'Formato de email inválido';
 	END IF;
 
+	-- Limpio los strings numéricos para remover caracteres innecesarios
 	SET NEW.documento = limpiar_string(NEW.documento);
     SET NEW.telefono = limpiar_string(NEW.telefono);
     SET NEW.celular = limpiar_string(NEW.celular);
@@ -361,11 +597,16 @@ CREATE TRIGGER validar_datos_empleado_insert
 BEFORE INSERT ON empleados
 FOR EACH ROW
 BEGIN 
-	IF validar_email(NEW.email) = 0 THEN
+	DECLARE mensaje VARCHAR(800);
+    
+	-- Valido la estructura del email con una función definida más abajo
+	IF NEW.email IS NOT NULL AND NOT validar_email(NEW.email) THEN
+		SET mensaje = CONCAT('Error en el empleado ', NEW.nombre, ' ', NEW.apellido, '. Email inválido');
 		SIGNAL SQLSTATE '45000'
         SET MESSAGE_TEXT = 'Formato de email inválido';
 	END IF;
 
+	-- Limpio los strings numéricos para remover caracteres innecesarios
 	SET NEW.documento = limpiar_string(NEW.documento);
     SET NEW.celular = limpiar_string(NEW.celular);
 END$$
@@ -374,14 +615,26 @@ CREATE TRIGGER validar_datos_empleado_update
 BEFORE UPDATE ON empleados
 FOR EACH ROW
 BEGIN 
-	IF validar_email(NEW.email) = 0 THEN
+	DECLARE mensaje VARCHAR(800);
+    
+	-- Valido la estructura del email con una función definida más abajo
+	IF NEW.email IS NOT NULL AND NOT validar_email(NEW.email) THEN
+		SET mensaje = CONCAT('Error en el empleado ', NEW.nombre, ' ', NEW.apellido, '. Email inválido');
 		SIGNAL SQLSTATE '45000'
         SET MESSAGE_TEXT = 'Formato de email inválido';
 	END IF;
 
+	-- Limpio los strings numéricos para remover caracteres innecesarios
 	SET NEW.documento = limpiar_string(NEW.documento);
     SET NEW.celular = limpiar_string(NEW.celular);
 END$$
+
+-- Trigger para insertar el usuario en la tabla honorarios_definitivos ya que no se puede insertar como DEFAULT en esa columna
+
+CREATE TRIGGER insertar_usuario_honorarios
+BEFORE INSERT ON honorarios_definitivos
+FOR EACH ROW
+SET NEW.usuario = USER();
 
 -- Triggers de validación de datos para la tabla tipo_de_empleado
 
@@ -389,14 +642,13 @@ CREATE TRIGGER validar_datos_tipo_empleado_insert
 BEFORE INSERT ON tipo_de_empleado
 FOR EACH ROW
 BEGIN 
-	IF NEW.porcentaje_tratamiento < 0 OR NEW.porcentaje_tratamiento > 100 THEN
-		SIGNAL SQLSTATE '45000'
-        SET MESSAGE_TEXT = 'El porcentaje de tratamiento va entre 0 y 100';
-	END IF;
+	DECLARE mensaje VARCHAR(800);
     
-    IF NEW.porcentaje_laboratorio < 0 OR NEW.porcentaje_laboratorio > 100 THEN
+	-- Valido que los porcentajes se encuentren entre 0 y 100
+	IF NEW.porcentaje_tratamiento NOT BETWEEN 0 AND 100 OR NEW.porcentaje_laboratorio NOT BETWEEN 0 AND 100 THEN
+		SET mensaje = CONCAT('Error en el tipo de empleado ', NEW.titulo, '. Los porcentajes van entre 0 y 100.');
 		SIGNAL SQLSTATE '45000'
-        SET MESSAGE_TEXT = 'El porcentaje de laboratorio va entre 0 y 100';
+        SET MESSAGE_TEXT = mensaje;
 	END IF;
 END$$
 
@@ -404,14 +656,13 @@ CREATE TRIGGER validar_datos_tipo_empleado_update
 BEFORE UPDATE ON tipo_de_empleado
 FOR EACH ROW
 BEGIN 
-	IF NEW.porcentaje_tratamiento < 0 OR NEW.porcentaje_tratamiento > 100 THEN
-		SIGNAL SQLSTATE '45000'
-        SET MESSAGE_TEXT = 'El porcentaje de tratamiento va entre 0 y 100';
-	END IF;
+	DECLARE mensaje VARCHAR(800);
     
-    IF NEW.porcentaje_laboratorio < 0 OR NEW.porcentaje_laboratorio > 100 THEN
+	-- Valido que los porcentajes se encuentren entre 0 y 100
+	IF NEW.porcentaje_tratamiento NOT BETWEEN 0 AND 100 OR NEW.porcentaje_laboratorio NOT BETWEEN 0 AND 100 THEN
+		SET mensaje = CONCAT('Error en el tipo de empleado ', NEW.titulo, '. Los porcentajes van entre 0 y 100.');
 		SIGNAL SQLSTATE '45000'
-        SET MESSAGE_TEXT = 'El porcentaje de laboratorio va entre 0 y 100';
+        SET MESSAGE_TEXT = mensaje;
 	END IF;
 END$$
 
@@ -421,9 +672,46 @@ CREATE TRIGGER validar_datos_turnos_insert
 BEFORE INSERT ON turnos
 FOR EACH ROW
 BEGIN 
-	IF NEW.id_empleado IS NULL AND NEW.id_tratamiento IS NULL THEN
+	DECLARE empleado_atiende, empleado_activo, tratamiento_solo_odontologos TINYINT;
+    DECLARE mensaje VARCHAR(800);
+    
+    -- Valido que me dé sólo el o un id_empleado o un id_tratamiento, pero no ambos
+	IF NOT (NEW.id_empleado IS NULL XOR NEW.id_tratamiento IS NULL) THEN
+		SET mensaje = CONCAT('Error en el turno del ', NEW.fecha,  ' ', NEW.hora, ' con id_paciente = ', NEW.id_paciente, ' .El turno debe tener asignado debe contener o un empleado o un tratamiento radiológico.');
 		SIGNAL SQLSTATE '45000'
-        SET MESSAGE_TEXT = 'El turno debe tener asignado o un odontólogo o un tratamiento radiológico';
+        SET MESSAGE_TEXT = mensaje;
+	END IF;
+    
+    -- Busco el estado del empleado mencionado. Cuando es NULL, no encuentra nada
+    SELECT te.atiende, e.activo INTO empleado_atiende, empleado_activo
+    FROM empleados e
+    JOIN tipo_de_empleado te ON e.id_tipo_empleado = te.id_tipo_empleado
+    WHERE e.id_empleado = NEW.id_empleado;
+    
+    -- Sólo permito que se inserten odontólogos para el turno
+    IF NOT empleado_atiende THEN
+		SET mensaje = CONCAT('Error en el turno con datos ', NEW.fecha, ' ', NEW.hora, ' id_paciente = ', NEW.id_paciente, '. En la columna id_empleado sólo puede figurar un odontólogo');
+		SIGNAL SQLSTATE '45000'
+        SET MESSAGE_TEXT = mensaje;
+	END IF;
+    
+    -- Sólo permito odontólogos acutalmente activos
+    IF NOT empleado_activo THEN
+		SET mensaje = CONCAT('Error en el turno con datos ', NEW.fecha, ' ', NEW.hora, ' id_paciente = ', NEW.id_paciente, '. El empleado referido en el turno se encuentra inactivo');
+		SIGNAL SQLSTATE '45000'
+        SET MESSAGE_TEXT = mensaje;
+	END IF;
+    
+    -- Busco si el tratamiento que figura lo pueden realizar sólo odontólogos. Si es NULL, no encuentra nada
+    SELECT tr.solo_odontologos INTO tratamiento_solo_odontologos
+    FROM tratamientos tr
+    WHERE tr.id_tratamiento = NEW.id_tratamiento;
+    
+    -- Sólo permito incluir tratamientos que puede realizar todos los empleados, como los radiológicos
+	IF tratamiento_solo_odontologos THEN
+		SET mensaje = CONCAT('Error en el turno con datos ', NEW.fecha, ' ', NEW.hora, ' id_paciente = ', NEW.id_paciente, '. El tratamiento referido puede ser realizado sólo por odontólogos');
+		SIGNAL SQLSTATE '45000'
+        SET MESSAGE_TEXT = mensaje;
 	END IF;
 END$$
 
@@ -431,9 +719,46 @@ CREATE TRIGGER validar_datos_turnos_update
 BEFORE UPDATE ON turnos
 FOR EACH ROW
 BEGIN 
-	IF NEW.id_empleado IS NULL AND NEW.id_tratamiento IS NULL THEN
+	DECLARE empleado_atiende, empleado_activo, tratamiento_solo_odontologos TINYINT;
+    DECLARE mensaje VARCHAR(800);
+    
+    -- Valido que me dé sólo el o un id_empleado o un id_tratamiento, pero no ambos
+	IF NOT (NEW.id_empleado IS NULL XOR NEW.id_tratamiento IS NULL) THEN
+		SET mensaje = CONCAT('Error en el turno del ', NEW.fecha,  ' ', NEW.hora, ' con id_paciente = ', NEW.id_paciente, ' .El turno debe tener asignado debe contener o un empleado o un tratamiento radiológico.');
 		SIGNAL SQLSTATE '45000'
-        SET MESSAGE_TEXT = 'El turno debe tener asignado o un odontólogo o un tratamiento radiológico';
+        SET MESSAGE_TEXT = mensaje;
+	END IF;
+    
+    -- Busco el estado del empleado mencionado. Cuando es NULL, no encuentra nada
+    SELECT te.atiende, e.activo INTO empleado_atiende, empleado_activo
+    FROM empleados e
+    JOIN tipo_de_empleado te ON e.id_tipo_empleado = te.id_tipo_empleado
+    WHERE e.id_empleado = NEW.id_empleado;
+    
+    -- Sólo permito que se inserten odontólogos para el turno
+    IF NOT empleado_atiende THEN
+		SET mensaje = CONCAT('Error en el turno con datos ', NEW.fecha, ' ', NEW.hora, ' id_paciente = ', NEW.id_paciente, '. En la columna id_empleado sólo puede figurar un odontólogo');
+		SIGNAL SQLSTATE '45000'
+        SET MESSAGE_TEXT = mensaje;
+	END IF;
+    
+    -- Sólo permito odontólogos acutalmente activos
+    IF NOT empleado_activo THEN
+		SET mensaje = CONCAT('Error en el turno con datos ', NEW.fecha, ' ', NEW.hora, ' id_paciente = ', NEW.id_paciente, '. El empleado referido en el turno se encuentra inactivo');
+		SIGNAL SQLSTATE '45000'
+        SET MESSAGE_TEXT = mensaje;
+	END IF;
+    
+    -- Busco si el tratamiento que figura lo pueden realizar sólo odontólogos. Si es NULL, no encuentra nada
+    SELECT tr.solo_odontologos INTO tratamiento_solo_odontologos
+    FROM tratamientos tr
+    WHERE tr.id_tratamiento = NEW.id_tratamiento;
+    
+    -- Sólo permito incluir tratamientos que puede realizar todos los empleados, como los radiológicos
+	IF tratamiento_solo_odontologos THEN
+		SET mensaje = CONCAT('Error en el turno con datos ', NEW.fecha, ' ', NEW.hora, ' id_paciente = ', NEW.id_paciente, '. El tratamiento referido puede ser realizado sólo por odontólogos');
+		SIGNAL SQLSTATE '45000'
+        SET MESSAGE_TEXT = mensaje;
 	END IF;
 END$$
 
@@ -443,11 +768,16 @@ CREATE TRIGGER validar_datos_laboratorios_insert
 BEFORE INSERT ON laboratorios
 FOR EACH ROW
 BEGIN 
-	IF NEW.email IS NOT NULL AND validar_email(NEW.email) = 0 THEN
+	DECLARE mensaje VARCHAR(800);
+    
+	-- Valido que el email se válido con una función definida más abajo
+	IF NEW.email IS NOT NULL AND NOT validar_email(NEW.email) THEN
+		SET mensaje = CONCAT('Error en el laboratorio ', NEW.nombre, '. Email inválido');
 		SIGNAL SQLSTATE '45000'
-        SET MESSAGE_TEXT = 'Formato de email inválido';
+        SET MESSAGE_TEXT = mensaje;
 	END IF;
     
+    -- Limpio los strings de entrada
 	SET NEW.telefono = limpiar_string(NEW.telefono);
     SET NEW.cuit = limpiar_string(NEW.cuit);
 END$$
@@ -456,11 +786,16 @@ CREATE TRIGGER validar_datos_laboratorios_update
 BEFORE UPDATE ON laboratorios
 FOR EACH ROW
 BEGIN
-	IF validar_email(NEW.email) = 0 OR NEW.email IS NULL THEN
+	DECLARE mensaje VARCHAR(800);
+    
+    -- Valido que el email se válido con una función definida más abajo
+	IF NEW.email IS NOT NULL AND NOT validar_email(NEW.email) THEN
+		SET mensaje = CONCAT('Error en el laboratorio ', NEW.nombre, '. Email inválido');
 		SIGNAL SQLSTATE '45000'
-        SET MESSAGE_TEXT = 'Formato de email inválido';
+        SET MESSAGE_TEXT = mensaje;
 	END IF;
 
+	-- Limpio los strings de entrada
 	SET NEW.telefono = limpiar_string(NEW.telefono);
     SET NEW.cuit = limpiar_string(NEW.cuit);
 END$$
@@ -475,6 +810,225 @@ BEGIN
 		SET NEW.id_estado_trabajo_laboratorio = 2;
 	END IF;
 END$$
+
+-- Triggers de la tabla stock. Controlan que no se inserten valores de cantidades sin sentido
+
+CREATE TRIGGER cantidades_stock_insert
+BEFORE INSERT ON stock
+FOR EACH ROW
+BEGIN
+	DECLARE mensaje VARCHAR(800);
+    
+    -- La positividad de las cantidades esta dada por el constrain de UNSIGNED en la definicion de la tabla
+    
+    -- Chequeo que la cantidad recomendada para pedir sea mayor que la cantidad mínima, sino no tiene sentido
+    IF NEW.cantidad_minima > NEW.cantidad_recomendada THEN
+		SET mensaje = CONCAT('La cantidad mínima ingresada para el producto ', NEW.nombre, ' debe ser menor que la cantidad recomendada');
+		SIGNAL SQLSTATE '45000'
+        SET MESSAGE_TEXT = mensaje;
+    END IF;
+END$$
+
+CREATE TRIGGER cantidades_stock_update
+BEFORE UPDATE ON stock
+FOR EACH ROW
+BEGIN
+	DECLARE mensaje VARCHAR(800);
+    
+    -- La positividad de las cantidades esta dada por el constrain de UNSIGNED en la definicion de la tabla
+    
+    -- Chequeo que la cantidad recomendada para pedir sea mayor que la cantidad mínima, sino no tiene sentido
+    IF NEW.cantidad_minima > NEW.cantidad_recomendada THEN
+		SET mensaje = CONCAT('La cantidad mínima ingresada para el producto ', NEW.nombre, ' debe ser menor que la cantidad recomendada');
+		SIGNAL SQLSTATE '45000'
+        SET MESSAGE_TEXT = mensaje;
+    END IF;
+END$$
+
+-- Triggers para chequear que se inserten los datos adecuados a medida que avanza un pedido
+
+CREATE TRIGGER avance_de_pedido_insert
+BEFORE INSERT ON pedidos_stock
+FOR EACH ROW
+BEGIN
+	DECLARE estado VARCHAR(20);
+    DECLARE mensaje VARCHAR(800);
+    
+    -- Busco el nombre del estado en el que se encuentra el pedido
+    SELECT ep.estado INTO estado
+    FROM estado_pedido ep
+    WHERE ep.id_estado_pedido = NEW.id_estado_pedido;
+
+	-- Si el estado del pedido es 'Recibido', me asegro que ingresen el empleado que lo recibió
+	IF estado = 'Recibido' AND NEW.id_empleado_recibe IS NULL THEN
+		SET mensaje = CONCAT('Error en el id_pedido = ', NEW.id_pedido, '. Al pasar un pedido a "Recibido", se debe insertar el empleado que lo recibió.');
+		SIGNAL SQLSTATE '45000'
+        SET MESSAGE_TEXT = mensaje;
+	END IF;
+    
+    -- Si el estado del pedido es 'Chequeado', me asegro que ingresen el empleado que lo recibió y el que lo revisó. Chequeo ambos por si se saltea el paso de 'Recibido'
+    IF estado = 'Chequeado' AND (NEW.id_empleado_recibe IS NULL OR NEW.id_empleado_controla IS NULL) THEN
+		SET mensaje = CONCAT('Error en el id_pedido = ', NEW.id_pedido, '. Al pasar un pedido a "Chequeado", se debe insertar el empleado que lo recibió y el que lo controló.');
+		SIGNAL SQLSTATE '45000'
+        SET MESSAGE_TEXT = mensaje;
+	END IF;
+END$$
+
+CREATE TRIGGER avance_de_pedido_update
+BEFORE UPDATE ON pedidos_stock
+FOR EACH ROW
+BEGIN
+	DECLARE estado VARCHAR(20);
+    DECLARE mensaje VARCHAR(800);
+    
+    -- Busco el nombre del estado en el que se encuentra el pedido
+    SELECT ep.estado INTO estado
+    FROM estado_pedido ep
+    WHERE ep.id_estado_pedido = NEW.id_estado_pedido;
+
+	-- Si el estado del pedido es 'Recibido', me asegro que ingresen el empleado que lo recibió
+	IF estado = 'Recibido' AND NEW.id_empleado_recibe IS NULL THEN
+		SET mensaje = CONCAT('Error en el id_pedido = ', NEW.id_pedido, '. Al pasar un pedido a "Recibido", se debe insertar el empleado que lo recibió.');
+		SIGNAL SQLSTATE '45000'
+        SET MESSAGE_TEXT = mensaje;
+	END IF;
+    
+    -- Si el estado del pedido es 'Chequeado', me asegro que ingresen el empleado que lo recibió y el que lo revisó. Chequeo ambos por si se saltea el paso de 'Recibido'
+    IF estado = 'Chequeado' AND (NEW.id_empleado_recibe IS NULL OR NEW.id_empleado_controla IS NULL) THEN
+		SET mensaje = CONCAT('Error en el id_pedido = ', NEW.id_pedido, '. Al pasar un pedido a "Chequeado", se debe insertar el empleado que lo recibió y el que lo controló.');
+		SIGNAL SQLSTATE '45000'
+        SET MESSAGE_TEXT = mensaje;
+	END IF;
+END$$
+
+-- Triggers para validación de datos de la tabla proveedores
+
+CREATE TRIGGER validar_datos_proveedores_insert
+BEFORE INSERT ON proveedores
+FOR EACH ROW
+BEGIN 
+	DECLARE mensaje VARCHAR(800);
+    
+	-- Valido el email con una funcion definida más abajo
+	IF NEW.email IS NOT NULL AND NOT validar_email(NEW.email) THEN
+		SET mensaje = CONCAT('Error en el proveedor ', NEW.nombre, '. Email inválido');
+		SIGNAL SQLSTATE '45000'
+        SET MESSAGE_TEXT = mensaje;
+	END IF;
+    
+    -- Limpio los strings de entrada
+	SET NEW.telefono = limpiar_string(NEW.telefono);
+    SET NEW.cuit = limpiar_string(NEW.cuit);
+END$$
+
+CREATE TRIGGER validar_datos_proveedores_update
+BEFORE UPDATE ON proveedores
+FOR EACH ROW
+BEGIN 
+	DECLARE mensaje VARCHAR(800);
+    
+	-- Valido el email con una funcion definida más abajo
+	IF NEW.email IS NOT NULL AND NOT validar_email(NEW.email) THEN
+		SET mensaje = CONCAT('Error en el proveedor ', NEW.nombre, '. Email inválido');
+		SIGNAL SQLSTATE '45000'
+        SET MESSAGE_TEXT = mensaje;
+	END IF;
+    
+    -- Limpio los strings de entrada
+	SET NEW.telefono = limpiar_string(NEW.telefono);
+    SET NEW.cuit = limpiar_string(NEW.cuit);
+END$$
+
+-- Triggers para actualizar automaticamente el stock frente a un INSERT de consumo_stock o ingreso_stock
+
+CREATE TRIGGER consumo_stock_insert
+BEFORE INSERT ON consumos_stock
+FOR EACH ROW
+BEGIN
+	DECLARE cantidad_actual INT;
+    DECLARE mensaje VARCHAR(800);
+    
+    -- La positividad de la cantidad esta garantizada por el constrain de UNSIGNED
+    
+    -- Busco la cantidad actual del producto consumido
+	SELECT st.cantidad INTO cantidad_actual
+    FROM stock st
+    WHERE st.id_producto = NEW.id_producto;
+    
+    -- Chequeo que haya suficiente en stock para el consumo que esta ingresando
+    IF cantidad_actual < NEW.cantidad THEN
+		SET mensaje = CONCAT('Error en id_producto = ', NEW.id_producto, '. La cantidad ingresada excede la cantidad disponible del producto');
+		SIGNAL SQLSTATE '45000'
+        SET MESSAGE_TEXT = mensaje;
+    END IF;
+    
+    -- Cambio el stock del producto, restándole la cantidad consumida
+    UPDATE stock st SET st.cantidad = (cantidad_actual - NEW.cantidad) WHERE st.id_producto = NEW.id_producto;
+END$$
+
+CREATE TRIGGER consumo_stock_update
+BEFORE UPDATE ON consumos_stock
+FOR EACH ROW
+BEGIN
+	DECLARE cantidad_actual INT;
+    DECLARE mensaje VARCHAR(800);
+    
+    -- La positividad de la cantidad esta garantizada por el constrain de UNSIGNED
+    
+    -- Busco la cantidad actual del producto consumido
+	SELECT st.cantidad INTO cantidad_actual
+    FROM stock st
+    WHERE st.id_producto = NEW.id_producto;
+    
+    -- Chequeo que haya suficiente stock para realizar la modificación sin irme por debajo de 0
+    IF cantidad_actual < (NEW.cantidad - OLD.cantidad) THEN
+		SET mensaje = CONCAT('Error en id_producto = ', NEW.id_producto, '. La cantidad ingresada excede la cantidad disponible del producto');
+		SIGNAL SQLSTATE '45000'
+        SET MESSAGE_TEXT = mensaje;
+    END IF;
+    
+    -- Modifico el stock, deshaciendo la resta anterior y rehaciendola con el nuevo valor
+    UPDATE stock st SET st.cantidad = (cantidad_actual + OLD.cantidad - NEW.cantidad) WHERE st.id_producto = NEW.id_producto;
+END$$
+
+CREATE TRIGGER ingreso_stock_insert
+AFTER INSERT ON ingresos_stock
+FOR EACH ROW
+BEGIN  
+	DECLARE cantidad_actual INT;
+    
+    -- La positividad de la cantidad esta garantizada por el constrain de UNSIGNED
+    
+    -- Busco la cantidad actual del producto consumido
+    SELECT st.cantidad INTO cantidad_actual
+    FROM stock st 
+    WHERE st.id_producto=NEW.id_producto;
+    
+    -- Modifico el stock sumando la cantidad ingresada
+    UPDATE stock st
+    SET st.cantidad = cantidad_actual + NEW.cantidad_ingresada
+    WHERE st.id_producto = NEW.id_producto;
+END$$
+
+CREATE TRIGGER ingreso_stock_update
+AFTER UPDATE ON ingresos_stock
+FOR EACH ROW
+BEGIN  
+	DECLARE cantidad_actual INT;
+    
+    -- La positividad de la cantidad esta garantizada por el constrain de UNSIGNED
+    
+    -- Busco la cantidad actual del producto consumido
+    SELECT st.cantidad INTO cantidad_actual
+    FROM stock st 
+    WHERE st.id_producto=NEW.id_producto;
+    
+    -- Modifico el stock, dehaciendo la suma anterior y sumando la nueva
+    UPDATE stock st
+    SET st.cantidad = cantidad_actual - OLD.cantidad_ingresada + NEW.cantidad_ingresada
+    WHERE st.id_producto = NEW.id_producto;
+END$$
+
 DELIMITER ;
 
 -- FUNCIONES --
@@ -485,38 +1039,38 @@ DELIMITER ;
 -- Un ejemplo seria llamar SELECT honorario_mensual(1, 2);
 
 DELIMITER $$
-DROP FUNCTION IF EXISTS `honorario_mensual`$$
-CREATE DEFINER=`root`@`localhost` FUNCTION `honorario_mensual`(id INT, mes INT) 
+CREATE FUNCTION honorario_mensual(id_odontologo INT, mes INT, anio INT) 
 	RETURNS DECIMAL(10,2)
     READS SQL DATA
 BEGIN
-	DECLARE porcentaje_tratamiento INT;
-    DECLARE porcentaje_laboratorio INT;
-    DECLARE facturacion_mensual DECIMAL(10,2);
-    DECLARE laboratorios_mensual DECIMAL(10,2);
+	DECLARE porcentaje_tratamiento, porcentaje_laboratorio INT;
+    DECLARE facturacion_mensual, laboratorios_mensual, honorarios DECIMAL(10,2);
     
-	SELECT te.porcentaje_tratamiento, te.porcentaje_laboratorio INTO porcentaje_tratamiento, porcentaje_laboratorio
-	FROM empleados e
-	JOIN tipo_de_empleado te ON e.id_tipo_empleado = te.id_tipo_empleado
-	WHERE e.id_empleado = id;
+    -- Obtengo los porcentajes correspondientes al odontólogo
+	CALL obtener_porcentajes(id_odontologo, porcentaje_tratamiento, porcentaje_laboratorio);
     
+    -- Si el empleado no recibe porcentaje de tratamientos, ya devuelvo 0.00
+    -- Esto evita ingresar empleado que no atienden sin chequear más
     IF porcentaje_tratamiento = 0 THEN
 		RETURN 0.00;
 	END IF;
     
-	SELECT SUM(facturacion) INTO facturacion_mensual
-    FROM facturacion_odontologo
-	WHERE id_empleado = id
-	AND MONTH(fecha) = mes;
+    -- Obtengo la facturación del mes de el odontólogo
+	CALL obtener_facturacion_mensual(id_odontologo, mes, anio, facturacion_mensual);
     
-    SELECT SUM(tl.precio) INTO laboratorios_mensual
-    FROM evoluciones ev 
-	JOIN turnos tu ON ev.id_turno = tu.id_turno
-	JOIN trabajos_laboratorio tl ON ev.id_trabajo_laboratorio = tl.id_trabajo_laboratorio
-	WHERE ev.id_empleado = id
-	AND MONTH(tu.fecha) = mes;
+    -- Obtengo los costos de laboratorio de los tratamientos del odontólogo
+    CALL obtener_costo_laboratorio(id_odontologo, mes, anio, laboratorios_mensual);
     
-    RETURN (facturacion_mensual * porcentaje_tratamiento - laboratorios_mensual * porcentaje_laboratorio) / 100;
+    -- Realizo la cuenta de honorarios. Le sumo el porcentaje que le corresponde de los pagos realizados en el mes
+    -- Le resto el porcentaje que le corresponde del costo de laboratorio
+    SET honorarios = (facturacion_mensual * porcentaje_tratamiento - laboratorios_mensual * porcentaje_laboratorio) / 100;
+    
+    -- Por si todos los valores son NULL, quiero devolver siempre números
+    IF honorarios IS NULL THEN
+		RETURN 0.00;
+	ELSE
+		RETURN honorarios;
+	END IF;
 END$$
 
 -- Esta función permite calcular los el adicional que cobran algunos empleados por ciertos tratamientos en un determinado mes
@@ -524,36 +1078,37 @@ END$$
 -- El parámetro mes es el valor numérico del mes del año para el cual se desea calcular los honorarios
 -- Un ejemplo seria llamar SELECT adicional_montos_fijos(13, 2);
 
-DROP FUNCTION IF EXISTS `adicional_montos_fijos`$$
-CREATE DEFINER=`root`@`localhost` FUNCTION `adicional_montos_fijos`(id INT, mes INT) 
+CREATE FUNCTION adicional_montos_fijos(id_asistente INT, mes INT, anio INT) 
 	RETURNS DECIMAL(10,2)
     READS SQL DATA
 BEGIN
 	DECLARE cobra_monto_fijo TINYINT;
     DECLARE adicional DECIMAL(10,2);
     
-	SELECT te.lleva_monto_fijo INTO cobra_monto_fijo
-    FROM empleados em
-    JOIN tipo_de_empleado te ON em.id_tipo_empleado = te.id_tipo_empleado
-    WHERE em.id_empleado = id;
+    -- Obtengo el estado del empleado, si cobra monto fijo
+    CALL obtener_estado_monto_fijo(id_asistente, cobra_monto_fijo);
     
+    -- Si ingresé un odontólogo ya devuelvo 0.00, sin necesidad de chequear el estado
     IF cobra_monto_fijo = 0 THEN
 		RETURN 0.00;
 	END IF;
     
-    SELECT SUM(tr.monto_fijo) INTO adicional
-	FROM pagos p
-	JOIN evoluciones ev ON p.id_evolucion = ev.id_evolucion
-	JOIN tratamientos tr ON ev.id_tratamiento = tr.id_tratamiento
-	WHERE ev.id_empleado = id
-    AND MONTH(p.fecha) = mes;
+    -- Calculo los adicionales que le corresponden el período indicado
+    CALL obtener_adicional(id_asistente, mes, anio, adicional);
     
-RETURN adicional;
+    -- Por si todos los adicionales son NULL, quiero retornar siempre números
+    IF adicional IS NULL THEN
+		RETURN 0.00;
+	ELSE    
+		RETURN adicional;
+	END IF;
 END$$
 
--- DOCSTRING
+-- Esta función toma como INPUT una sequencia de caracteres y lo limpia de caracteres indeseados. 
+-- Se utiliza para limpiar los datos ingresados de teléfonos, documentos y números de CUIT
+-- Remueve todos los caracteres que no son numéricos EXCEPTO si comienza con un +, para teléfonos internacionales
 
-CREATE FUNCTION `limpiar_string` (input VARCHAR(50))
+CREATE FUNCTION limpiar_string(input VARCHAR(50))
 RETURNS VARCHAR(50)
 DETERMINISTIC
 BEGIN
@@ -565,10 +1120,13 @@ BEGIN
     SET n = CHAR_LENGTH(input);
 	SET i = 0;
     
+    -- Permito que empiece con un + ya que puede ser un teléfono internacional
+    -- Se usa para otras cosas que no son teléfonos, pero las chances que se dé algo así son bajas
     IF LOCATE('+', input) IN (1, 2) THEN
 		SET cleaned_string = '+';
 	END IF;
     
+    -- Hago un loop sobre los caracteres, chequeando si son números. Si lo son, los agrego al string limpio
 	WHILE i <= n DO
 		SET c = RIGHT(LEFT(input, i),1);
         
@@ -582,13 +1140,15 @@ BEGIN
     RETURN cleaned_string;
 END$$
 
--- DOCSTRING
+-- Función que frente a una secuencia de caracteres, devuelve un BOOLEANO indicando si la secuencia es una dirección de email válida.
+-- Utiliza una expresión regular para el formato actual de emails válidos.
 
-CREATE FUNCTION `validar_email` (input VARCHAR(50))
+CREATE FUNCTION validar_email (input VARCHAR(50))
 RETURNS TINYINT
 NO SQL
 BEGIN
 	-- El REGEXP la saque de https://stackoverflow.com/questions/12759596/validate-email-addresses-in-mysql
+    -- No se bien como funciona, pero chequeandolo parece andar bien con los formatos válidos de email del presente
 	IF input REGEXP '^[a-zA-Z0-9][a-zA-Z0-9.!#$%&\'*+-/=?^_`{|}~]*?[a-zA-Z0-9._-]?@[a-zA-Z0-9][a-zA-Z0-9._-]*?[a-zA-Z0-9]?\\.[a-zA-Z]{2,63}$' THEN
 		RETURN 1;
 	END IF;
@@ -599,14 +1159,12 @@ DELIMITER ;
 
 -- POBLACIÓN DE TABLAS --
 
-INSERT INTO tipo_de_empleado (titulo, atiende, porcentaje_tratamiento, porcentaje_laboratorio, lleva_monto_fijo) 
-VALUES ('Socio', 1, 70, 50, 0), ('Odontólogo', 1, 40, 50, 0), ('Recepcionista', 0, 0, 0, 1), ('Asistente', 0, 0, 0, 1);
+INSERT INTO tipo_de_empleado (titulo, atiende, porcentaje_tratamiento, porcentaje_laboratorio, lleva_monto_fijo) VALUES 
+	('Socio', 1, 70, 50, 0), ('Odontólogo', 1, 40, 50, 0), ('Recepcionista', 0, 0, 0, 1), ('Asistente', 0, 0, 0, 1);
     
-INSERT INTO modo_pago (modo)
-VALUES ('Efectivo'), ('Mercado Pago'), ('Transferencia'), ('Tarjeta de Débito'), ('Tarjeta de Crédito');
+INSERT INTO modo_pago (modo) VALUES ('Efectivo'), ('Mercado Pago'), ('Transferencia'), ('Tarjeta de Débito'), ('Tarjeta de Crédito');
 
-INSERT INTO laboratorios (nombre, telefono, direccion, email, cuit, activo)
-VALUES
+INSERT INTO laboratorios (nombre, telefono, direccion, email, cuit, activo) VALUES
 	('Dental Lab', '47233265', 'Av. Rivadavia 2154, Balvanera', NULL, '30215469857', 1),
     ('Super Lab','42569874', 'Av. Maipu 1656, Vicente Lopez, Pcia. de Buenos Aires', 'superlab@gmail.com', '30256547891', 0),
     ('Fym Dental Lab', '43254785', 'Av. Rivadavia 1936, Balvanera', 'fymdental@gmail.com', '30487963525', 1),
@@ -620,8 +1178,7 @@ INSERT INTO estado_turno (estado) VALUES ('No asistió'), ('Asistió'), ('Turno 
 
 INSERT INTO estado_trabajo_laboratorio (estado) VALUES ('Iniciado'), ('Asignado'), ('Despachado'), ('Recibido'), ('Entregado');
 
-INSERT INTO pacientes (nombre, apellido, documento, id_genero, fecha_de_nacimiento, email, celular, telefono)
-VALUES 
+INSERT INTO pacientes (nombre, apellido, documento, id_genero, fecha_de_nacimiento, email, celular, telefono) VALUES 
 	('Juan', 'Straciatella', 34521478, 2, '1990-02-25', 'jstraciatella@gmail.com', '1549769856', '41527014'),
     ('Estela', 'Marquez', 16529689, 1, '1965-07-10', 'estela.marquez26@gmail.com', '1554789561', '50249014'),
     ('Juliana Ester', 'Porto', 23457898, 1, '1973-10-07', 'julianap163@gmail.com', '1543689501', '47926520'),
@@ -648,21 +1205,19 @@ VALUES
 	("Nissim", "Sosa", 32224776, 1, "1961-01-06", "n_sosa8667@outlook.org", "1544363174", "43113127"),
 	("Veda", "Kaufman", 12929457, 1, "1986-04-05", "kaufman-veda7250@hotmail.org", "1531582363", "41644859");
 
-INSERT INTO tratamientos (nombre, nomenclador, precio, monto_fijo, trabajo_laboratorio)
-VALUES 
-	('Caries', 'CI.1012.01', 3500.00, 0.00, 0),
-    ('Radiografía panorámica', 'CI.1034.01', 1650.25, 350.00, 0),
-    ('Implante', 'CI.1102.01', 26750.00, 0.00, 0),
-    ('Corona sobre implante', 'CI.1102.02', 47855.00, 0.00, 1),
-    ('Tratamiento de conducto', 'CI.1005.01', 16500.00, 0.00, 0),
-    ('Alineadores', 'CI.1501.01', 105000.00, 0.00, 1),
-    ('Perno', 'CI.1005.02', 11500.00, 0.00, 0),
-    ('Corona sobre perno', 'CI.1005.03', 37450.00, 0.00, 1),
-    ('Placa miorrelajante', 'CI.1250.01', 6500.00, 500.00, 1),
-    ('Limpieza', 'CI.1022.01', 8950.00, 0.00, 0);
+INSERT INTO tratamientos (nombre, nomenclador, precio, monto_fijo, trabajo_laboratorio, solo_odontologos) VALUES 
+	('Caries', 'CI.1012.01', 3500.00, 0.00, 0, 1),
+    ('Radiografía panorámica', 'CI.1034.01', 1650.25, 350.00, 0, 0),
+    ('Implante', 'CI.1102.01', 26750.00, 0.00, 0, 1),
+    ('Corona sobre implante', 'CI.1102.02', 47855.00, 0.00, 1, 1),
+    ('Tratamiento de conducto', 'CI.1005.01', 16500.00, 0.00, 0, 1),
+    ('Alineadores', 'CI.1501.01', 105000.00, 0.00, 1, 1),
+    ('Perno', 'CI.1005.02', 11500.00, 0.00, 0, 1),
+    ('Corona sobre perno', 'CI.1005.03', 37450.00, 0.00, 1, 1),
+    ('Placa miorrelajante', 'CI.1250.01', 6500.00, 500.00, 1, 1),
+    ('Limpieza', 'CI.1022.01', 8950.00, 0.00, 0, 1);
     
-INSERT INTO empleados (nombre, apellido, documento, id_genero, fecha_de_nacimiento, email, celular, direccion, id_tipo_empleado, activo)
-VALUES 
+INSERT INTO empleados (nombre, apellido, documento, id_genero, fecha_de_nacimiento, email, celular, direccion, id_tipo_empleado, activo) VALUES 
 	('Sebastián', 'Galarza', 34987014, 2, '1990-02-16', 'sgalarza@gmail.com', '1543580123', 'Cochabamba 498, CABA', 1, 1),
     ('Adriana', 'Lillian', 32421598, 1, '1989-12-14', 'adrilili@gmail.com', '1543659878', 'Cochabamba 498, CABA', 1, 1),
     ('Ximena', 'Ponce', 37259846, 1, '1993-09-26', 'ximelaloca@gmail.com', '1535980147', 'Av Santa Fe 3256 6A, CABA', 2, 1),
@@ -678,8 +1233,7 @@ VALUES
     ('Raquel', 'Brea', 35412985, 1, '1990-02-08', 'kellybrea90@gmail.com', '1533014978', 'Rio de Janerico 1547, CABA', 4, 1),
     ('Ramona', 'Montiel', 40415951, 1, '1995-06-16', 'rmontiel95@gmail.com', '1550789889', '7 de Septiembre 1597, CABA', 4, 1);
 
-INSERT INTO turnos (fecha, hora, id_estado_turno, id_paciente, id_empleado, id_tratamiento)
-VALUES 
+INSERT INTO turnos (fecha, hora, id_estado_turno, id_paciente, id_empleado, id_tratamiento) VALUES 
 	-- Ondontólogo id 1
     ('2022-02-12', '10:00', 2, 19, 1, NULL), ('2022-02-12', '12:00', 2,  6, 1, NULL), ('2022-02-12', '14:00', 1, 14, 1, NULL), ('2022-02-12', '16:00', 2,  2, 1, NULL),
     ('2022-04-25', '10:30', 2, 25, 1, NULL), ('2022-04-25', '11:30', 2, 19, 1, NULL), ('2022-04-25', '13:30', 2, 10, 1, NULL), ('2022-04-25', '15:00', 2,  2, 1, NULL),
@@ -728,125 +1282,123 @@ VALUES
     ('2022-09-05', '12:00', 2,  6, NULL, 2), ('2022-09-05', '14:00', 2, 25, NULL, 2), 
     ('2022-12-13', '10:30', 3, 23, NULL, 2), ('2022-12-13', '16:00', 3, 17, NULL, 2);
 
-INSERT INTO evoluciones (id_tratamiento, id_turno, id_paciente, id_empleado, descripcion)
-VALUES 
-	(7, 1, 19, 1, 'Se cementó un perno sobre la pieza 23'),
-	(4, 2, 6, 1, 'Se colocó y atornilló un implante de porcelana sobre el implante colocado en la pieza 17'),
-	(5, 2, 6, 1, 'Se realizó un tratamiento de conducto debido a un nervio comprometido por infección en la pieza 20'),
-	(3, 2, 6, 1, 'Se colocó un implante de titanio luego de una cirugía en la pieza 3'),
-	(7, 4, 2, 1, 'Se cementó un perno sobre la pieza 25'),
-	(1, 4, 2, 1, 'Se removió una caries en la pieza 26'),
-	(6, 5, 25, 1, 'Se inició le evaluación del estado de la boca para iniciar un tratamiento de corrección de dentadura por alineadores'),
-	(1, 5, 25, 1, 'Se removió una caries en la pieza 27'),
-	(5, 5, 25, 1, 'Se realizó un tratamiento de conducto debido a un nervio comprometido por infección en la pieza 6'),
-	(7, 6, 19, 1, 'Se cementó un perno sobre la pieza 26'),
-	(3, 7, 10, 1, 'Se colocó un implante de titanio luego de una cirugía en la pieza 28'),
-	(7, 8, 2, 1, 'Se cementó un perno sobre la pieza 26'),
-	(7, 10, 16, 1, 'Se cementó un perno sobre la pieza 21'),
-	(9, 10, 16, 1, 'Se le preparó una placa miorrelajante a la paciente debido a bruxismo'),
-	(9, 11, 22, 1, 'Se le preparó una placa miorrelajante a la paciente debido a bruxismo'),
-	(3, 11, 22, 1, 'Se colocó un implante de titanio luego de una cirugía en la pieza 10'),
-	(1, 12, 25, 1, 'Se removió una caries en la pieza 6'),
-	(5, 12, 25, 1, 'Se realizó un tratamiento de conducto debido a un nervio comprometido por infección en la pieza 31'),
-	(6, 13, 13, 1, 'Se inició le evaluación del estado de la boca para iniciar un tratamiento de corrección de dentadura por alineadores'),
-	(2, 14, 8, 1, 'Se realizó una radiografía panorámica de la boca del paciente'),
-	(5, 15, 24, 1, 'Se realizó un tratamiento de conducto debido a un nervio comprometido por infección en la pieza 7'),
-	(4, 15, 24, 1, 'Se colocó y atornilló un implante de porcelana sobre el implante colocado en la pieza 30'),
-	(4, 25, 15, 2, 'Se colocó y atornilló un implante de porcelana sobre el implante colocado en la pieza 16'),
-	(4, 26, 14, 2, 'Se colocó y atornilló un implante de porcelana sobre el implante colocado en la pieza 32'),
-	(9, 27, 21, 2, 'Se le preparó una placa miorrelajante a la paciente debido a bruxismo'),
-	(3, 30, 4, 2, 'Se colocó un implante de titanio luego de una cirugía en la pieza 19'),
-	(7, 31, 9, 2, 'Se cementó un perno sobre la pieza 21'),
-	(8, 32, 15, 2, 'Se colocó un implante de porcelana sobre el perno de la pieza 19'),
-	(9, 33, 1, 2, 'Se le preparó una placa miorrelajante a la paciente debido a bruxismo'),
-	(6, 33, 1, 2, 'Se inició le evaluación del estado de la boca para iniciar un tratamiento de corrección de dentadura por alineadores'),
-	(10, 35, 22, 2, 'Se realizó una limpieza completa con ultrasonido, removiendo sarro acumulado'),
-	(3, 35, 22, 2, 'Se colocó un implante de titanio luego de una cirugía en la pieza 3'),
-	(1, 35, 22, 2, 'Se removió una caries en la pieza 24'),
-	(9, 36, 17, 2, 'Se le preparó una placa miorrelajante a la paciente debido a bruxismo'),
-	(9, 38, 1, 2, 'Se le preparó una placa miorrelajante a la paciente debido a bruxismo'),
-	(6, 39, 20, 2, 'Se inició le evaluación del estado de la boca para iniciar un tratamiento de corrección de dentadura por alineadores'),
-	(9, 39, 20, 2, 'Se le preparó una placa miorrelajante a la paciente debido a bruxismo'),
-	(5, 39, 20, 2, 'Se realizó un tratamiento de conducto debido a un nervio comprometido por infección en la pieza 20'),
-	(3, 40, 4, 2, 'Se colocó un implante de titanio luego de una cirugía en la pieza 1'),
-	(9, 40, 4, 2, 'Se le preparó una placa miorrelajante a la paciente debido a bruxismo'),
-	(10, 40, 4, 2, 'Se realizó una limpieza completa con ultrasonido, removiendo sarro acumulado'),
-	(8, 49, 11, 3, 'Se colocó un implante de porcelana sobre el perno de la pieza 17'),
-	(2, 49, 11, 3, 'Se realizó una radiografía panorámica de la boca del paciente'),
-	(8, 50, 3, 3, 'Se colocó un implante de porcelana sobre el perno de la pieza 20'),
-	(6, 51, 8, 3, 'Se inició le evaluación del estado de la boca para iniciar un tratamiento de corrección de dentadura por alineadores'),
-	(10, 52, 21, 3, 'Se realizó una limpieza completa con ultrasonido, removiendo sarro acumulado'),
-	(9, 53, 13, 3, 'Se le preparó una placa miorrelajante a la paciente debido a bruxismo'),
-	(1, 53, 13, 3, 'Se removió una caries en la pieza 8'),
-	(10, 53, 13, 3, 'Se realizó una limpieza completa con ultrasonido, removiendo sarro acumulado'),
-	(7, 56, 4, 3, 'Se cementó un perno sobre la pieza 22'),
-	(3, 57, 14, 3, 'Se colocó un implante de titanio luego de una cirugía en la pieza 18'),
-	(10, 57, 14, 3, 'Se realizó una limpieza completa con ultrasonido, removiendo sarro acumulado'),
-	(8, 58, 25, 3, 'Se colocó un implante de porcelana sobre el perno de la pieza 27'),
-	(2, 58, 25, 3, 'Se realizó una radiografía panorámica de la boca del paciente'),
-	(7, 58, 25, 3, 'Se cementó un perno sobre la pieza 8'),
-	(7, 59, 24, 3, 'Se cementó un perno sobre la pieza 12'),
-	(4, 63, 7, 3, 'Se colocó y atornilló un implante de porcelana sobre el implante colocado en la pieza 15'),
-	(9, 64, 15, 3, 'Se le preparó una placa miorrelajante a la paciente debido a bruxismo'),
-	(6, 73, 3, 4, 'Se inició le evaluación del estado de la boca para iniciar un tratamiento de corrección de dentadura por alineadores'),
-	(6, 75, 1, 4, 'Se inició le evaluación del estado de la boca para iniciar un tratamiento de corrección de dentadura por alineadores'),
-	(10, 76, 22, 4, 'Se realizó una limpieza completa con ultrasonido, removiendo sarro acumulado'),
-	(4, 77, 18, 4, 'Se colocó y atornilló un implante de porcelana sobre el implante colocado en la pieza 19'),
-	(8, 79, 9, 4, 'Se colocó un implante de porcelana sobre el perno de la pieza 4'),
-	(6, 80, 11, 4, 'Se inició le evaluación del estado de la boca para iniciar un tratamiento de corrección de dentadura por alineadores'),
-	(2, 81, 13, 4, 'Se realizó una radiografía panorámica de la boca del paciente'),
-	(4, 82, 19, 4, 'Se colocó y atornilló un implante de porcelana sobre el implante colocado en la pieza 3'),
-	(9, 83, 6, 4, 'Se le preparó una placa miorrelajante a la paciente debido a bruxismo'),
-	(5, 83, 6, 4, 'Se realizó un tratamiento de conducto debido a un nervio comprometido por infección en la pieza 6'),
-	(2, 84, 1, 4, 'Se realizó una radiografía panorámica de la boca del paciente'),
-	(7, 86, 20, 4, 'Se cementó un perno sobre la pieza 28'),
-	(2, 88, 8, 4, 'Se realizó una radiografía panorámica de la boca del paciente'),
-	(8, 98, 2, 5, 'Se colocó un implante de porcelana sobre el perno de la pieza 11'),
-	(6, 98, 2, 5, 'Se inició le evaluación del estado de la boca para iniciar un tratamiento de corrección de dentadura por alineadores'),
-	(1, 98, 2, 5, 'Se removió una caries en la pieza 4'),
-	(6, 99, 12, 5, 'Se inició le evaluación del estado de la boca para iniciar un tratamiento de corrección de dentadura por alineadores'),
-	(10, 100, 4, 5, 'Se realizó una limpieza completa con ultrasonido, removiendo sarro acumulado'),
-	(4, 101, 5, 5, 'Se colocó y atornilló un implante de porcelana sobre el implante colocado en la pieza 12'),
-	(5, 102, 1, 5, 'Se realizó un tratamiento de conducto debido a un nervio comprometido por infección en la pieza 32'),
-	(3, 103, 9, 5, 'Se colocó un implante de titanio luego de una cirugía en la pieza 31'),
-	(4, 105, 22, 5, 'Se colocó y atornilló un implante de porcelana sobre el implante colocado en la pieza 26'),
-	(2, 105, 22, 5, 'Se realizó una radiografía panorámica de la boca del paciente'),
-	(10, 106, 13, 5, 'Se realizó una limpieza completa con ultrasonido, removiendo sarro acumulado'),
-	(6, 107, 5, 5, 'Se inició le evaluación del estado de la boca para iniciar un tratamiento de corrección de dentadura por alineadores'),
-	(1, 107, 5, 5, 'Se removió una caries en la pieza 32'),
-	(7, 108, 2, 5, 'Se cementó un perno sobre la pieza 26'),
-	(3, 109, 4, 5, 'Se colocó un implante de titanio luego de una cirugía en la pieza 30'),
-	(10, 110, 7, 5, 'Se realizó una limpieza completa con ultrasonido, removiendo sarro acumulado'),
-	(4, 110, 7, 5, 'Se colocó y atornilló un implante de porcelana sobre el implante colocado en la pieza 15'),
-	(5, 111, 5, 5, 'Se realizó un tratamiento de conducto debido a un nervio comprometido por infección en la pieza 2'),
-	(3, 111, 5, 5, 'Se colocó un implante de titanio luego de una cirugía en la pieza 2'),
-	(1, 111, 5, 5, 'Se removió una caries en la pieza 21'),
-	(4, 112, 6, 5, 'Se colocó y atornilló un implante de porcelana sobre el implante colocado en la pieza 21'),
-	(2, 121, 20, 6, 'Se realizó una radiografía panorámica de la boca del paciente'),
-	(7, 121, 20, 6, 'Se cementó un perno sobre la pieza 31'),
-	(5, 121, 20, 6, 'Se realizó un tratamiento de conducto debido a un nervio comprometido por infección en la pieza 18'),
-	(9, 122, 21, 6, 'Se le preparó una placa miorrelajante a la paciente debido a bruxismo'),
-	(10, 123, 9, 6, 'Se realizó una limpieza completa con ultrasonido, removiendo sarro acumulado'),
-	(7, 124, 8, 6, 'Se cementó un perno sobre la pieza 17'),
-	(3, 125, 22, 6, 'Se colocó un implante de titanio luego de una cirugía en la pieza 12'),
-	(9, 126, 20, 6, 'Se le preparó una placa miorrelajante a la paciente debido a bruxismo'),
-	(4, 129, 7, 6, 'Se colocó y atornilló un implante de porcelana sobre el implante colocado en la pieza 11'),
-	(2, 131, 18, 6, 'Se realizó una radiografía panorámica de la boca del paciente'),
-	(10, 133, 17, 6, 'Se realizó una limpieza completa con ultrasonido, removiendo sarro acumulado'),
-	(8, 133, 17, 6, 'Se colocó un implante de porcelana sobre el perno de la pieza 15'),
-	(4, 134, 5, 6, 'Se colocó y atornilló un implante de porcelana sobre el implante colocado en la pieza 6'),
-	(8, 134, 5, 6, 'Se colocó un implante de porcelana sobre el perno de la pieza 14'),
-	(4, 135, 15, 6, 'Se colocó y atornilló un implante de porcelana sobre el implante colocado en la pieza 13'),
-	(4, 136, 16, 6, 'Se colocó y atornilló un implante de porcelana sobre el implante colocado en la pieza 5'),
-	(2, 145, 17, 13, 'Se realizó una radiografía panorámica de la boca del paciente'),
-	(2, 146, 10, 13, 'Se realizó una radiografía panorámica de la boca del paciente'),
-	(2, 147, 10, 12, 'Se realizó una radiografía panorámica de la boca del paciente'),
-	(2, 148, 22, 13, 'Se realizó una radiografía panorámica de la boca del paciente'),
-	(2, 149, 6, 9, 'Se realizó una radiografía panorámica de la boca del paciente'),
-	(2, 150, 25, 12, 'Se realizó una radiografía panorámica de la boca del paciente');
+INSERT INTO evoluciones (id_tratamiento, id_turno, id_empleado, descripcion) VALUES 
+	(7, 1, 1, 'Se cementó un perno sobre la pieza 23'),
+	(4, 2, 1, 'Se colocó y atornilló un implante de porcelana sobre el implante colocado en la pieza 17'),
+	(5, 2, 1, 'Se realizó un tratamiento de conducto debido a un nervio comprometido por infección en la pieza 20'),
+	(3, 2, 1, 'Se colocó un implante de titanio luego de una cirugía en la pieza 3'),
+	(7, 4, 1, 'Se cementó un perno sobre la pieza 25'),
+	(1, 4, 1, 'Se removió una caries en la pieza 26'),
+	(6, 5, 1, 'Se inició le evaluación del estado de la boca para iniciar un tratamiento de corrección de dentadura por alineadores'),
+	(1, 5, 1, 'Se removió una caries en la pieza 27'),
+	(5, 5, 1, 'Se realizó un tratamiento de conducto debido a un nervio comprometido por infección en la pieza 6'),
+	(7, 6, 1, 'Se cementó un perno sobre la pieza 26'),
+	(3, 7, 1, 'Se colocó un implante de titanio luego de una cirugía en la pieza 28'),
+	(7, 8, 1, 'Se cementó un perno sobre la pieza 26'),
+	(7, 10, 1, 'Se cementó un perno sobre la pieza 21'),
+	(9, 10, 1, 'Se le preparó una placa miorrelajante a la paciente debido a bruxismo'),
+	(9, 11, 1, 'Se le preparó una placa miorrelajante a la paciente debido a bruxismo'),
+	(3, 11, 1, 'Se colocó un implante de titanio luego de una cirugía en la pieza 10'),
+	(1, 12, 1, 'Se removió una caries en la pieza 6'),
+	(5, 12, 1, 'Se realizó un tratamiento de conducto debido a un nervio comprometido por infección en la pieza 31'),
+	(6, 13, 1, 'Se inició le evaluación del estado de la boca para iniciar un tratamiento de corrección de dentadura por alineadores'),
+	(2, 14, 1, 'Se realizó una radiografía panorámica de la boca del paciente'),
+	(5, 15, 1, 'Se realizó un tratamiento de conducto debido a un nervio comprometido por infección en la pieza 7'),
+	(4, 15, 1, 'Se colocó y atornilló un implante de porcelana sobre el implante colocado en la pieza 30'),
+	(4, 25, 2, 'Se colocó y atornilló un implante de porcelana sobre el implante colocado en la pieza 16'),
+	(4, 26, 2, 'Se colocó y atornilló un implante de porcelana sobre el implante colocado en la pieza 32'),
+	(9, 27, 2, 'Se le preparó una placa miorrelajante a la paciente debido a bruxismo'),
+	(3, 30, 2, 'Se colocó un implante de titanio luego de una cirugía en la pieza 19'),
+	(7, 31, 2, 'Se cementó un perno sobre la pieza 21'),
+	(8, 32, 2, 'Se colocó un implante de porcelana sobre el perno de la pieza 19'),
+	(9, 33, 2, 'Se le preparó una placa miorrelajante a la paciente debido a bruxismo'),
+	(6, 33, 2, 'Se inició le evaluación del estado de la boca para iniciar un tratamiento de corrección de dentadura por alineadores'),
+	(10, 35, 2, 'Se realizó una limpieza completa con ultrasonido, removiendo sarro acumulado'),
+	(3, 35, 2, 'Se colocó un implante de titanio luego de una cirugía en la pieza 3'),
+	(1, 35, 2, 'Se removió una caries en la pieza 24'),
+	(9, 36, 2, 'Se le preparó una placa miorrelajante a la paciente debido a bruxismo'),
+	(9, 38, 2, 'Se le preparó una placa miorrelajante a la paciente debido a bruxismo'),
+	(6, 39, 2, 'Se inició le evaluación del estado de la boca para iniciar un tratamiento de corrección de dentadura por alineadores'),
+	(9, 39, 2, 'Se le preparó una placa miorrelajante a la paciente debido a bruxismo'),
+	(5, 39, 2, 'Se realizó un tratamiento de conducto debido a un nervio comprometido por infección en la pieza 20'),
+	(3, 40, 2, 'Se colocó un implante de titanio luego de una cirugía en la pieza 1'),
+	(9, 40, 2, 'Se le preparó una placa miorrelajante a la paciente debido a bruxismo'),
+	(10, 40, 2, 'Se realizó una limpieza completa con ultrasonido, removiendo sarro acumulado'),
+	(8, 49, 3, 'Se colocó un implante de porcelana sobre el perno de la pieza 17'),
+	(2, 49, 3, 'Se realizó una radiografía panorámica de la boca del paciente'),
+	(8, 50, 3, 'Se colocó un implante de porcelana sobre el perno de la pieza 20'),
+	(6, 51, 3, 'Se inició le evaluación del estado de la boca para iniciar un tratamiento de corrección de dentadura por alineadores'),
+	(10, 52, 3, 'Se realizó una limpieza completa con ultrasonido, removiendo sarro acumulado'),
+	(9, 53, 3, 'Se le preparó una placa miorrelajante a la paciente debido a bruxismo'),
+	(1, 53, 3, 'Se removió una caries en la pieza 8'),
+	(10, 53, 3, 'Se realizó una limpieza completa con ultrasonido, removiendo sarro acumulado'),
+	(7, 56, 3, 'Se cementó un perno sobre la pieza 22'),
+	(3, 57, 3, 'Se colocó un implante de titanio luego de una cirugía en la pieza 18'),
+	(10, 57, 3, 'Se realizó una limpieza completa con ultrasonido, removiendo sarro acumulado'),
+	(8, 58, 3, 'Se colocó un implante de porcelana sobre el perno de la pieza 27'),
+	(2, 58, 3, 'Se realizó una radiografía panorámica de la boca del paciente'),
+	(7, 58, 3, 'Se cementó un perno sobre la pieza 8'),
+	(7, 59, 3, 'Se cementó un perno sobre la pieza 12'),
+	(4, 63, 3, 'Se colocó y atornilló un implante de porcelana sobre el implante colocado en la pieza 15'),
+	(9, 64, 3, 'Se le preparó una placa miorrelajante a la paciente debido a bruxismo'),
+	(6, 73, 4, 'Se inició le evaluación del estado de la boca para iniciar un tratamiento de corrección de dentadura por alineadores'),
+	(6, 75, 4, 'Se inició le evaluación del estado de la boca para iniciar un tratamiento de corrección de dentadura por alineadores'),
+	(10, 76, 4, 'Se realizó una limpieza completa con ultrasonido, removiendo sarro acumulado'),
+	(4, 77, 4, 'Se colocó y atornilló un implante de porcelana sobre el implante colocado en la pieza 19'),
+	(8, 79, 4, 'Se colocó un implante de porcelana sobre el perno de la pieza 4'),
+	(6, 80, 4, 'Se inició le evaluación del estado de la boca para iniciar un tratamiento de corrección de dentadura por alineadores'),
+	(2, 81, 4, 'Se realizó una radiografía panorámica de la boca del paciente'),
+	(4, 82, 4, 'Se colocó y atornilló un implante de porcelana sobre el implante colocado en la pieza 3'),
+	(9, 83, 4, 'Se le preparó una placa miorrelajante a la paciente debido a bruxismo'),
+	(5, 83, 4, 'Se realizó un tratamiento de conducto debido a un nervio comprometido por infección en la pieza 6'),
+	(2, 84, 4, 'Se realizó una radiografía panorámica de la boca del paciente'),
+	(7, 86, 4, 'Se cementó un perno sobre la pieza 28'),
+	(2, 88, 4, 'Se realizó una radiografía panorámica de la boca del paciente'),
+	(8, 98, 5, 'Se colocó un implante de porcelana sobre el perno de la pieza 11'),
+	(6, 98, 5, 'Se inició le evaluación del estado de la boca para iniciar un tratamiento de corrección de dentadura por alineadores'),
+	(1, 98, 5, 'Se removió una caries en la pieza 4'),
+	(6, 99, 5, 'Se inició le evaluación del estado de la boca para iniciar un tratamiento de corrección de dentadura por alineadores'),
+	(10, 100, 5, 'Se realizó una limpieza completa con ultrasonido, removiendo sarro acumulado'),
+	(4, 101, 5, 'Se colocó y atornilló un implante de porcelana sobre el implante colocado en la pieza 12'),
+	(5, 102, 5, 'Se realizó un tratamiento de conducto debido a un nervio comprometido por infección en la pieza 32'),
+	(3, 103, 5, 'Se colocó un implante de titanio luego de una cirugía en la pieza 31'),
+	(4, 105, 5, 'Se colocó y atornilló un implante de porcelana sobre el implante colocado en la pieza 26'),
+	(2, 105, 5, 'Se realizó una radiografía panorámica de la boca del paciente'),
+	(10, 106, 5, 'Se realizó una limpieza completa con ultrasonido, removiendo sarro acumulado'),
+	(6, 107, 5, 'Se inició le evaluación del estado de la boca para iniciar un tratamiento de corrección de dentadura por alineadores'),
+	(1, 107,5, 'Se removió una caries en la pieza 32'),
+	(7, 108, 5, 'Se cementó un perno sobre la pieza 26'),
+	(3, 109, 5, 'Se colocó un implante de titanio luego de una cirugía en la pieza 30'),
+	(10, 110, 5, 'Se realizó una limpieza completa con ultrasonido, removiendo sarro acumulado'),
+	(4, 110, 5, 'Se colocó y atornilló un implante de porcelana sobre el implante colocado en la pieza 15'),
+	(5, 111, 5, 'Se realizó un tratamiento de conducto debido a un nervio comprometido por infección en la pieza 2'),
+	(3, 111, 5, 'Se colocó un implante de titanio luego de una cirugía en la pieza 2'),
+	(1, 111, 5, 'Se removió una caries en la pieza 21'),
+	(4, 112, 5, 'Se colocó y atornilló un implante de porcelana sobre el implante colocado en la pieza 21'),
+	(2, 121, 6, 'Se realizó una radiografía panorámica de la boca del paciente'),
+	(7, 121, 6, 'Se cementó un perno sobre la pieza 31'),
+	(5, 121, 6, 'Se realizó un tratamiento de conducto debido a un nervio comprometido por infección en la pieza 18'),
+	(9, 122, 6, 'Se le preparó una placa miorrelajante a la paciente debido a bruxismo'),
+	(10, 123, 6, 'Se realizó una limpieza completa con ultrasonido, removiendo sarro acumulado'),
+	(7, 124, 6, 'Se cementó un perno sobre la pieza 17'),
+	(3, 125, 6, 'Se colocó un implante de titanio luego de una cirugía en la pieza 12'),
+	(9, 126, 6, 'Se le preparó una placa miorrelajante a la paciente debido a bruxismo'),
+	(4, 129, 6, 'Se colocó y atornilló un implante de porcelana sobre el implante colocado en la pieza 11'),
+	(2, 131, 6, 'Se realizó una radiografía panorámica de la boca del paciente'),
+	(10, 133, 6, 'Se realizó una limpieza completa con ultrasonido, removiendo sarro acumulado'),
+	(8, 133, 6, 'Se colocó un implante de porcelana sobre el perno de la pieza 15'),
+	(4, 134, 6, 'Se colocó y atornilló un implante de porcelana sobre el implante colocado en la pieza 6'),
+	(8, 134, 6, 'Se colocó un implante de porcelana sobre el perno de la pieza 14'),
+	(4, 135, 6, 'Se colocó y atornilló un implante de porcelana sobre el implante colocado en la pieza 13'),
+	(4, 136, 6, 'Se colocó y atornilló un implante de porcelana sobre el implante colocado en la pieza 5'),
+	(2, 145, 13, 'Se realizó una radiografía panorámica de la boca del paciente'),
+	(2, 146, 13, 'Se realizó una radiografía panorámica de la boca del paciente'),
+	(2, 147, 12, 'Se realizó una radiografía panorámica de la boca del paciente'),
+	(2, 148, 13, 'Se realizó una radiografía panorámica de la boca del paciente'),
+	(2, 149, 9, 'Se realizó una radiografía panorámica de la boca del paciente'),
+	(2, 150, 12, 'Se realizó una radiografía panorámica de la boca del paciente');
     
-INSERT INTO pagos (fecha, id_evolucion, monto, id_modo_pago)
-VALUES
+INSERT INTO pagos (fecha, id_evolucion, monto, id_modo_pago) VALUES
 	('2022-02-12', 1, 11500.0, 5), ('2022-02-12', 2, 47855.0, 3), ('2022-02-12', 3, 16500.0, 1), ('2022-02-12', 4, 26750.0, 2), ('2022-02-12', 5, 3910.0, 2), ('2022-02-15', 5, 7590.0, 2),
 	('2022-02-12', 6, 3500.0, 1), ('2022-04-25', 7, 105000.0, 4), ('2022-04-25', 8, 3500.0, 1), ('2022-04-25', 9, 16500.0, 5), ('2022-04-25', 10, 11500.0, 5), ('2022-04-25', 11, 26750.0, 1),
 	('2022-04-25', 12, 11500.0, 3), ('2022-06-17', 13, 11500.0, 2), ('2022-06-17', 14, 6500.0, 3), ('2022-06-17', 15, 6500.0, 4), ('2022-06-17', 16, 26750.0, 1), ('2022-06-17', 17, 3500.0, 3),
@@ -869,73 +1421,207 @@ VALUES
 	('2022-02-12', 109, 1650.25, 3), ('2022-02-12', 110, 775.62, 3), ('2022-02-15', 110, 874.63, 3), ('2022-04-25', 111, 1650.25, 2), ('2022-04-25', 112, 1650.25, 3), ('2022-09-05', 113, 1650.25, 4),
 	('2022-09-05', 114, 1650.25, 2);
 
+INSERT INTO stock (nombre, cantidad, cantidad_minima, cantidad_recomendada, presentacion, variedad, ubicacion) VALUES
+	('Guantes de latex', 6, 3, 19, 'Caja/s', 'Talle XS', 'Estantería e4'), ('Guantes de latex', 18, 5, 19, 'Caja/s', 'Talle S', 'Estantería c2'),
+	('Guantes de latex', 4, 4, 20, 'Caja/s', 'Talle M', 'Estantería e1'), ('Guantes de latex', 11, 5, 16, 'Caja/s', 'Talle L', 'Estantería g1'),
+	('Guantes de latex', 12, 8, 8, 'Caja/s', 'Talle XL', 'Estantería d1'), ('Barbijos quirúrgicos', 13, 6, 10, 'Caja/s', NULL, 'Estantería f3'),
+	('Lima p/ conducto', 16, 5, 14, 'Unidad/es', 'Tamaño 1', 'Estantería f2'), ('Lima p/ conducto', 16, 6, 10, 'Unidad/es', 'Tamaño 2', 'Estantería f1'),
+	('Lima p/ conducto', 3, 3, 10, 'Unidad/es', 'Tamaño 3', 'Estantería e1'), ('Lima p/ conducto', 9, 6, 18, 'Unidad/es', 'Tamaño 4', 'Estantería f1'),
+	('Lima p/ conducto', 8, 7, 10, 'Unidad/es', 'Tamaño 5', 'Estantería g2'), ('Lima p/ conducto', 17, 4, 17, 'Unidad/es', 'Tamaño 6', 'Estantería g2'),
+	('Papel absorbente p/ conducto', 16, 8, 8, 'Unidad/es', NULL, 'Estantería b3'), ('Fresa p/ torno', 16, 4, 15, 'Unidad/es', 'Cónica tamaño 1', 'Estantería c2'),
+	('Fresa p/ torno', 13, 8, 19, 'Unidad/es', 'Cónica tamaño 2', 'Estantería d3'), ('Fresa p/ torno', 11, 6, 8, 'Unidad/es', 'Cónica tamaño 3', 'Estantería c1'),
+	('Fresa p/ torno', 4, 4, 16, 'Unidad/es', 'Cilíndrica tamaño 1', 'Estantería d2'), ('Fresa p/ torno', 4, 6, 13, 'Unidad/es', 'Cilíndrica tamaño 2', 'Estantería g2'),
+	('Fresa p/ torno', 10, 4, 20, 'Unidad/es', 'Cilíndrica tamaño 3', 'Estantería b5'), ('Tubo flexible p/ absorbedor', 17, 8, 8, 'Paquete/s', NULL, 'Estantería g3'),
+	('Ionómetro vítreo', 20, 8, 12, 'Kilo/s', NULL, 'Estantería f1'), ('Pasta c/ flúor', 3, 7, 20, 'Tubo/s', NULL, 'Estantería d1');
+    
+INSERT INTO proveedores (nombre, telefono, direccion, email, url, cuit, activo) VALUES
+	('Greenberg', '47653548', 'Av. Santa Fe 3256, CABA', 'ventas@greenberg.com.ar', 'www.greenbarg.com.ar', 30524125630, 1),
+    ('Insumos Dental Total', '41258964', 'Riobamba 1415, 2B, CABA', 'ventas@dentaltotal.com.ar', NULL, 30356589591, 1),
+    ('Viscay Implementos', '50265896', 'Fray Justo Sarmiento 252, Vicente Lopez', 'info@viscay.com.ar', NULL, 30154858965, 0),
+    ('Miguel del Monte', '1148759855', 'Soldado de Malvinas 1145, CABA', 'mmonte@gmail.com', NULL, 20365214588, 1),
+    ("Lilli's", '43689856', 'Viamonte 1190, CABA', 'consultas@lillis.com.ar', 'www.lillis.com.ar', 30785415952, 1),
+    ('Instrumental Pasteur', '49857854', 'Viamonte 1145, CABA', 'ventas@instrumentalpasteur.com.ar', 'www.instrumentalpasteur.com.ar', 30652147023, 1),
+    ('Gabriel Montero', '1142157845', 'Av. Presidente Peron 7450, Avellaneda', 'gabymontero@hotmail.com', NULL, 20270147853, 0),
+    ('Pipes Insumos Dentales', '32659887', 'Juana Azurduy 2569, CABA', 'pipesventas@yahoo.com.ar', NULL, 30269856489, 1);
+    
+INSERT INTO estado_pedido (estado) VALUES ('Realizado'), ('Recibido'), ('Chequeado');
+
+INSERT INTO pedidos_stock (id_proveedor, fecha_ingreso, precio_total, id_estado_pedido, id_empleado_recibe, id_empleado_controla) VALUES
+	(1, '2022-04-01', 105000.00, 3, 9, 9),
+    (4, '2022-04-01', 45000.00, 3, 13, 10),
+    (2, '2022-07-02', 85000.00, 3, 12, 12),
+    (4, '2022-07-01', 38000.00, 3, 14, 14),
+    (1, '2022-10-01', 78000.00, 3, 9, 14),
+    (2, '2022-10-03', 36000.00, 2, 13, NULL),
+    (4, '2022-10-03', 24000.00, 2, 10, NULL);
+
+-- A partir de aca hay una serie de consumos e ingresos de stock, simulando pedidos cada un par de meses
+
+INSERT INTO consumos_stock (fecha, hora, id_producto, cantidad, id_empleado_retira, id_empleado_utiliza) VALUES
+	('2022-02-08', '10:30', 4, 2, 4, 4), ('2022-02-26', '16:03', 3, 1, 10, 4), ('2022-02-27', '19:02', 6, 1, 13, 2),
+	('2022-02-09', '14:50', 13, 1, 10, 1), ('2022-02-25', '14:21', 3, 1, 7, 2), ('2022-02-13', '19:28', 8, 1, 13, 6),
+	('2022-02-10', '11:47', 19, 1, 12, 1), ('2022-02-14', '11:55', 11, 1, 3, 6), ('2022-02-16', '18:44', 9, 2, 8, 3),
+	('2022-03-14', '12:13', 10, 1, 6, 2), ('2022-03-23', '17:34', 3, 1, 3, 1), ('2022-03-17', '13:38', 14, 2, 9, 5),
+	('2022-03-06', '15:40', 5, 1, 3, 6), ('2022-03-17', '12:08', 15, 1, 6, 2), ('2022-03-22', '10:47', 12, 1, 1, 1),
+	('2022-03-06', '20:14', 17, 1, 2, 6), ('2022-03-23', '19:56', 3, 1, 10, 2), ('2022-03-28', '19:51', 20, 1, 9, 2),
+	('2022-03-04', '18:12', 8, 1, 12, 2), ('2022-03-08', '19:26', 4, 1, 5, 5), ('2022-03-10', '17:02', 11, 2, 1, 6),
+	('2022-03-01', '16:07', 22, 1, 1, 2), ('2022-03-18', '20:14', 4, 3, 2, 2), ('2022-03-15', '13:07', 5, 1, 9, 1),
+	('2022-03-27', '12:56', 8, 3, 6, 5), ('2022-03-28', '13:36', 6, 1, 9, 3), ('2022-03-18', '14:28', 11, 1, 8, 2),
+	('2022-03-28', '10:07', 18, 2, 6, 6), ('2022-03-12', '20:51', 18, 1, 5, 4), ('2022-03-26', '10:02', 5, 1, 14, 5),
+	('2022-03-10', '20:17', 10, 1, 3, 2), ('2022-03-27', '10:49', 13, 1, 3, 3), ('2022-03-11', '10:32', 21, 1, 4, 3),
+	('2022-03-10', '15:27', 15, 1, 12, 3), ('2022-03-05', '10:26', 14, 5, 4, 1), ('2022-03-19', '15:47', 16, 1, 4, 3), 
+    ('2022-03-07', '14:17', 16, 1, 9, 3), ('2022-03-21', '13:27', 4, 1, 14, 2), ('2022-03-28', '10:35', 22, 1, 8, 6),
+	('2022-03-02', '18:11', 5, 1, 5, 3), ('2022-03-04', '11:08', 22, 1, 8, 6), ('2022-03-03', '19:08', 5, 1, 5, 1),
+	('2022-03-05', '14:30', 21, 1, 4, 2), ('2022-03-27', '12:22', 5, 2, 12, 3), ('2022-03-27', '16:52', 15, 1, 6, 1),
+	('2022-03-05', '10:35', 10, 1, 14, 4), ('2022-03-20', '20:52', 6, 2, 5, 2);
+
+INSERT INTO ingresos_stock (id_pedido, id_producto, cantidad_ingresada) VALUES
+	(1, 17, 16), (1, 18, 13), (1, 9, 10), (1, 10, 18), (1, 11, 10),
+	(1, 22, 20), (2, 3, 20), (2, 4, 16), (2, 5, 8);
+    
+INSERT INTO consumos_stock (fecha, hora, id_producto, cantidad, id_empleado_retira, id_empleado_utiliza) VALUES
+	('2022-04-05', '19:44', 2, 1, 13, 4), ('2022-04-09', '16:42', 7, 1, 11, 4), ('2022-04-26', '14:51', 19, 1, 8, 3),
+	('2022-04-09', '11:02', 11, 1, 4, 2), ('2022-04-09', '15:39', 2, 1, 14, 6), ('2022-04-01', '14:30', 4, 1, 5, 6),
+	('2022-04-13', '13:40', 7, 1, 9, 2), ('2022-04-28', '14:28', 13, 1, 7, 6), ('2022-04-28', '15:54', 12, 1, 2, 4),
+	('2022-04-09', '11:27', 22, 1, 6, 5), ('2022-04-03', '15:39', 20, 2, 4, 1), ('2022-04-02', '14:34', 8, 1, 7, 2),
+	('2022-04-05', '13:09', 17, 2, 1, 2), ('2022-04-04', '17:42', 4, 1, 2, 1), ('2022-04-15', '11:36', 15, 2, 10, 5),
+	('2022-04-05', '10:58', 18, 1, 1, 5), ('2022-04-24', '14:28', 22, 3, 9, 6), ('2022-04-23', '19:54', 10, 1, 12, 5),
+	('2022-04-19', '12:12', 4, 1, 12, 3), ('2022-04-17', '10:09', 14, 2, 8, 1), ('2022-04-01', '10:15', 15, 1, 3, 6),
+	('2022-04-16', '10:24', 5, 1, 1, 5), ('2022-04-14', '11:40', 21, 1, 6, 2), ('2022-04-28', '18:41', 15, 1, 8, 1),
+	('2022-04-02', '15:13', 1, 1, 2, 4), ('2022-04-16', '14:08', 9, 2, 2, 5), ('2022-04-22', '16:12', 14, 1, 10, 1),
+	('2022-04-16', '14:33', 11, 1, 14, 1), ('2022-04-28', '10:35', 3, 1, 4, 2), ('2022-04-16', '15:14', 14, 2, 9, 3),
+	('2022-04-02', '12:28', 3, 1, 7, 2), ('2022-04-25', '10:04', 21, 1, 14, 1), ('2022-04-04', '15:31', 22, 1, 11, 2),
+	('2022-04-20', '13:10', 1, 2, 14, 4), ('2022-04-08', '10:35', 3, 1, 14, 3), ('2022-04-22', '15:08', 8, 2, 6, 2),
+	('2022-04-11', '12:05', 17, 2, 7, 3), ('2022-04-06', '14:28', 8, 1, 14, 1), ('2022-04-21', '12:17', 5, 1, 7, 3),
+	('2022-04-24', '18:40', 16, 1, 10, 3), ('2022-04-27', '15:27', 10, 1, 1, 6), ('2022-04-08', '17:13', 15, 1, 9, 3),
+	('2022-04-20', '13:43', 6, 1, 4, 1), ('2022-04-04', '11:13', 2, 1, 6, 1), ('2022-04-08', '20:37', 15, 3, 12, 1),
+	('2022-05-21', '19:59', 10, 1, 6, 5), ('2022-05-17', '12:28', 11, 2, 14, 1), ('2022-06-27', '15:25', 9, 1, 1, 5),
+	('2022-06-12', '14:53', 18, 1, 2, 5), ('2022-06-19', '17:27', 21, 1, 10, 4);
+
+INSERT INTO ingresos_stock (id_pedido, id_producto, cantidad_ingresada) VALUES
+	(1, 14, 15), (1, 15, 19), (2, 1, 19);
+    
+INSERT INTO consumos_stock (fecha, hora, id_producto, cantidad, id_empleado_retira, id_empleado_utiliza) VALUES
+	('2022-07-14', '18:52', 20, 2, 1, 6), ('2022-07-28', '11:18', 1, 1, 1, 4), ('2022-07-01', '16:21', 7, 1, 1, 4),
+	('2022-07-13', '10:10', 5, 1, 10, 2), ('2022-07-19', '14:01', 17, 3, 12, 2), ('2022-07-21', '12:39', 6, 2, 7, 2),
+	('2022-07-11', '12:08', 22, 1, 1, 3), ('2022-07-12', '13:12', 19, 2, 14, 4), ('2022-08-10', '19:11', 1, 1, 14, 6),
+	('2022-08-05', '16:59', 11, 1, 2, 5), ('2022-08-11', '11:45', 7, 1, 8, 4), ('2022-08-26', '14:36', 1, 1, 9, 5),
+	('2022-08-18', '13:01', 2, 1, 14, 3), ('2022-08-22', '19:56', 8, 3, 12, 6), ('2022-08-05', '17:29', 4, 1, 7, 3),
+	('2022-08-08', '12:17', 11, 2, 9, 2), ('2022-08-28', '18:23', 18, 1, 1, 4), ('2022-08-18', '19:54', 16, 1, 12, 2),
+	('2022-08-01', '15:18', 22, 1, 12, 5), ('2022-08-01', '17:48', 2, 1, 1, 6), ('2022-08-04', '15:12', 4, 1, 8, 5),
+	('2022-08-23', '11:52', 3, 1, 12, 2), ('2022-08-07', '16:45', 12, 1, 6, 2), ('2022-08-25', '20:03', 18, 1, 7, 4),
+	('2022-08-26', '19:43', 1, 1, 13, 4), ('2022-08-03', '13:02', 2, 1, 1, 4), ('2022-08-16', '15:44', 8, 1, 3, 1),
+	('2022-08-19', '12:56', 2, 1, 6, 4), ('2022-08-28', '13:47', 10, 1, 3, 1), ('2022-08-22', '12:17', 15, 1, 2, 3),
+	('2022-08-01', '11:25', 1, 1, 2, 6), ('2022-08-04', '17:47', 15, 1, 1, 3), ('2022-08-02', '13:46', 4, 1, 9, 6),
+	('2022-08-22', '15:29', 5, 1, 10, 6), ('2022-08-13', '11:13', 18, 2, 2, 6), ('2022-08-04', '10:13', 17, 1, 14, 3),
+	('2022-08-17', '15:48', 16, 1, 14, 5), ('2022-08-27', '18:07', 12, 1, 1, 5), ('2022-08-08', '20:42', 13, 2, 3, 2),
+	('2022-08-09', '18:37', 14, 1, 4, 3), ('2022-08-27', '14:50', 2, 1, 2, 1), ('2022-08-12', '11:40', 2, 1, 3, 3),
+	('2022-08-08', '14:01', 9, 1, 11, 1), ('2022-08-02', '13:29', 19, 1, 9, 5), ('2022-08-06', '12:19', 9, 1, 8, 1),
+	('2022-08-12', '19:23', 6, 1, 3, 6), ('2022-08-05', '11:48', 21, 4, 3, 2), ('2022-08-06', '20:08', 4, 1, 14, 4),
+	('2022-08-20', '13:11', 5, 1, 9, 4), ('2022-08-06', '18:19', 8, 1, 9, 6), ('2022-08-25', '13:50', 9, 1, 7, 3),
+	('2022-08-23', '11:44', 1, 1, 6, 6), ('2022-08-07', '11:33', 13, 1, 8, 5), ('2022-08-22', '13:22', 16, 1, 5, 5),
+	('2022-08-25', '14:33', 2, 1, 10, 1), ('2022-08-03', '15:41', 8, 1, 6, 2), ('2022-08-03', '11:49', 2, 1, 11, 5),
+	('2022-08-28', '10:52', 4, 1, 7, 3), ('2022-08-21', '16:06', 16, 1, 12, 1), ('2022-08-10', '11:29', 1, 1, 7, 2),
+	('2022-08-13', '15:31', 16, 1, 9, 1), ('2022-08-19', '17:26', 19, 2, 13, 2), ('2022-08-06', '11:21', 9, 1, 1, 2),
+	('2022-08-19', '18:04', 20, 1, 14, 4), ('2022-08-24', '18:00', 7, 1, 2, 6), ('2022-08-11', '10:08', 9, 1, 10, 6),
+	('2022-08-20', '18:23', 20, 1, 1, 3), ('2022-09-24', '13:44', 3, 3, 2, 3), ('2022-09-09', '19:00', 9, 1, 4, 6),
+	('2022-09-21', '16:33', 19, 2, 11, 6), ('2022-09-16', '12:12', 19, 1, 1, 1), ('2022-09-24', '12:18', 1, 1, 8, 6), 
+    ('2022-09-28', '13:47', 12, 3, 1, 5), ('2022-09-15', '17:02', 16, 2, 9, 5), ('2022-09-05', '15:20', 14, 1, 7, 5), 
+    ('2022-09-17', '10:34', 13, 1, 11, 3), ('2022-09-19', '10:39', 5, 1, 7, 1), ('2022-09-15', '20:37', 8, 1, 8, 4), 
+    ('2022-09-12', '10:39', 14, 1, 10, 1), ('2022-09-09', '18:01', 6, 1, 12, 1), ('2022-09-05', '16:12', 11, 2, 4, 6), 
+    ('2022-09-03', '14:20', 12, 3, 11, 5), ('2022-09-18', '11:25', 14, 2, 6, 4), ('2022-09-05', '12:27', 1, 1, 7, 6),
+	('2022-09-04', '11:34', 16, 1, 6, 1), ('2022-09-21', '10:12', 10, 1, 6, 1), ('2022-09-26', '19:03', 9, 1, 3, 6),
+	('2022-09-04', '17:19', 2, 1, 10, 1), ('2022-09-28', '16:47', 11, 1, 8, 4), ('2022-09-10', '20:44', 11, 1, 12, 6),
+	('2022-09-10', '11:04', 18, 1, 1, 2), ('2022-09-05', '19:41', 12, 2, 1, 5), ('2022-09-22', '14:22', 10, 1, 14, 4),
+	('2022-09-10', '17:09', 1, 1, 3, 5), ('2022-09-25', '11:46', 6, 1, 12, 6), ('2022-09-16', '17:05', 13, 2, 4, 1);
+
+INSERT INTO ingresos_stock (id_pedido, id_producto, cantidad_ingresada) VALUES
+	(1, 16, 8), (1, 19, 20), (2, 8, 10), (2, 9, 10),
+	(2, 11, 10), (2, 13, 8),(3, 6, 10), (3, 5, 8);
+
+-- Esta tabla se llena sola en la utilización comun. Esto simula el proceso de llamar el SP honorarios a fin de cada mes trabajado (excepto septiembre, dejado para testear)
+INSERT INTO honorarios_definitivos (fecha_definicion, usuario, id_empleado, honorario, mes, anio) VALUES 
+	('2022-03-01','root@localhost',1,65823.50,2,2022), ('2022-05-01','root@localhost',1,109825.00,4,2022),  ('2022-07-01','root@localhost',1,43375.00,6,2022),
+	('2022-03-01','root@localhost',2,28547.00,2,2022), ('2022-05-01','root@localhost',2,43990.00,4,2022), ('2022-07-01','root@localhost',2,84540.00,6,2022),
+	('2022-03-01','root@localhost',3,61700.10,2,2022), ('2022-05-01','root@localhost',3,180.00,4,2022), ('2022-07-01','root@localhost',3,33620.10,6,2022),
+	('2022-03-01','root@localhost',4,64580.00,2,2022), ('2022-05-01','root@localhost',4,64622.00,4,2022), ('2022-07-01','root@localhost',4,6162.20,6,2022), 
+	('2022-03-01','root@localhost',5,72460.00,2,2022), ('2022-05-01','root@localhost',5,26442.00,4,2022), ('2022-07-01','root@localhost',5,61382.10,6,2022),
+	('2022-03-01','root@localhost',6,12640.10,2,2022), ('2022-05-01','root@localhost',6,8800.00,4,2022), ('2022-07-01','root@localhost',6,7802.10,6,2022), 
+	('2022-03-01','root@localhost',9,0.00,2,2022), ('2022-05-01','root@localhost',9,0.00,4,2022), ('2022-07-01','root@localhost',9,0.00,6,2022), 
+	('2022-03-01','root@localhost',10,0.00,2,2022),('2022-05-01','root@localhost',10,0.00,4,2022), ('2022-07-01','root@localhost',10,0.00,6,2022), 
+	('2022-03-01','root@localhost',12,0.00,2,2022), ('2022-05-01','root@localhost',12,350.00,4,2022), ('2022-07-01','root@localhost',12,0.00,6,2022), 
+	('2022-03-01','root@localhost',13,700.00,2,2022), ('2022-05-01','root@localhost',13,350.00,4,2022), ('2022-07-01','root@localhost',13,0.00,6,2022), 
+	('2022-03-01','root@localhost',14,0.00,2,2022), ('2022-05-01','root@localhost',14,0.00,4,2022), ('2022-07-01','root@localhost',14,0.00,6,2022);
+
 -- A continuación modifico las filas vacías autogeneradas en trabajos_laboratorio
 
-UPDATE trabajos_laboratorio SET id_laboratorio=NULL, precio=63000, id_estado_trabajo_laboratorio=1 WHERE id_trabajo_laboratorio=1;
-UPDATE trabajos_laboratorio SET id_laboratorio=2, precio=50000, id_estado_trabajo_laboratorio=2 WHERE id_trabajo_laboratorio=2;
-UPDATE trabajos_laboratorio SET id_laboratorio=NULL, precio=5000, id_estado_trabajo_laboratorio=1 WHERE id_trabajo_laboratorio=3;
-UPDATE trabajos_laboratorio SET id_laboratorio=NULL, precio=17000, id_estado_trabajo_laboratorio=1 WHERE id_trabajo_laboratorio=4;
-UPDATE trabajos_laboratorio SET id_laboratorio=6, precio=46000, id_estado_trabajo_laboratorio=4 WHERE id_trabajo_laboratorio=5;
-UPDATE trabajos_laboratorio SET id_laboratorio=3, precio=22000, id_estado_trabajo_laboratorio=4 WHERE id_trabajo_laboratorio=6;
-UPDATE trabajos_laboratorio SET id_laboratorio=NULL, precio=42000, id_estado_trabajo_laboratorio=1 WHERE id_trabajo_laboratorio=7;
-UPDATE trabajos_laboratorio SET id_laboratorio=NULL, precio=65000, id_estado_trabajo_laboratorio=1 WHERE id_trabajo_laboratorio=8;
-UPDATE trabajos_laboratorio SET id_laboratorio=1, precio=25000, id_estado_trabajo_laboratorio=3 WHERE id_trabajo_laboratorio=9;
-UPDATE trabajos_laboratorio SET id_laboratorio=4, precio=32000, id_estado_trabajo_laboratorio=3 WHERE id_trabajo_laboratorio=10;
-UPDATE trabajos_laboratorio SET id_laboratorio=2, precio=48000, id_estado_trabajo_laboratorio=3 WHERE id_trabajo_laboratorio=11;
-UPDATE trabajos_laboratorio SET id_laboratorio=NULL, precio=61000, id_estado_trabajo_laboratorio=1 WHERE id_trabajo_laboratorio=12;
-UPDATE trabajos_laboratorio SET id_laboratorio=6, precio=49000, id_estado_trabajo_laboratorio=3 WHERE id_trabajo_laboratorio=13;
-UPDATE trabajos_laboratorio SET id_laboratorio=NULL, precio=54000, id_estado_trabajo_laboratorio=1 WHERE id_trabajo_laboratorio=14;
-UPDATE trabajos_laboratorio SET id_laboratorio=2, precio=62000, id_estado_trabajo_laboratorio=2 WHERE id_trabajo_laboratorio=15;
-UPDATE trabajos_laboratorio SET id_laboratorio=4, precio=22000, id_estado_trabajo_laboratorio=4 WHERE id_trabajo_laboratorio=16;
-UPDATE trabajos_laboratorio SET id_laboratorio=3, precio=65000, id_estado_trabajo_laboratorio=2 WHERE id_trabajo_laboratorio=17;
-UPDATE trabajos_laboratorio SET id_laboratorio=1, precio=29000, id_estado_trabajo_laboratorio=4 WHERE id_trabajo_laboratorio=18;
-UPDATE trabajos_laboratorio SET id_laboratorio=3, precio=7000, id_estado_trabajo_laboratorio=4 WHERE id_trabajo_laboratorio=19;
-UPDATE trabajos_laboratorio SET id_laboratorio=4, precio=11000, id_estado_trabajo_laboratorio=3 WHERE id_trabajo_laboratorio=20;
-UPDATE trabajos_laboratorio SET id_laboratorio=NULL, precio=58000, id_estado_trabajo_laboratorio=1 WHERE id_trabajo_laboratorio=21;
-UPDATE trabajos_laboratorio SET id_laboratorio=3, precio=17000, id_estado_trabajo_laboratorio=2 WHERE id_trabajo_laboratorio=22;
-UPDATE trabajos_laboratorio SET id_laboratorio=1, precio=11000, id_estado_trabajo_laboratorio=4 WHERE id_trabajo_laboratorio=23;
-UPDATE trabajos_laboratorio SET id_laboratorio=NULL, precio=32000, id_estado_trabajo_laboratorio=1 WHERE id_trabajo_laboratorio=24;
-UPDATE trabajos_laboratorio SET id_laboratorio=4, precio=54000, id_estado_trabajo_laboratorio=2 WHERE id_trabajo_laboratorio=25;
-UPDATE trabajos_laboratorio SET id_laboratorio=3, precio=50000, id_estado_trabajo_laboratorio=4 WHERE id_trabajo_laboratorio=26;
-UPDATE trabajos_laboratorio SET id_laboratorio=4, precio=6000, id_estado_trabajo_laboratorio=4 WHERE id_trabajo_laboratorio=27;
-UPDATE trabajos_laboratorio SET id_laboratorio=3, precio=45000, id_estado_trabajo_laboratorio=4 WHERE id_trabajo_laboratorio=28;
-UPDATE trabajos_laboratorio SET id_laboratorio=4, precio=19000, id_estado_trabajo_laboratorio=3 WHERE id_trabajo_laboratorio=29;
-UPDATE trabajos_laboratorio SET id_laboratorio=3, precio=29000, id_estado_trabajo_laboratorio=3 WHERE id_trabajo_laboratorio=30;
-UPDATE trabajos_laboratorio SET id_laboratorio=2, precio=51000, id_estado_trabajo_laboratorio=4 WHERE id_trabajo_laboratorio=31;
-UPDATE trabajos_laboratorio SET id_laboratorio=NULL, precio=50000, id_estado_trabajo_laboratorio=1 WHERE id_trabajo_laboratorio=32;
-UPDATE trabajos_laboratorio SET id_laboratorio=5, precio=38000, id_estado_trabajo_laboratorio=3 WHERE id_trabajo_laboratorio=33;
-UPDATE trabajos_laboratorio SET id_laboratorio=NULL, precio=43000, id_estado_trabajo_laboratorio=1 WHERE id_trabajo_laboratorio=34;
-UPDATE trabajos_laboratorio SET id_laboratorio=3, precio=43000, id_estado_trabajo_laboratorio=4 WHERE id_trabajo_laboratorio=35;
-UPDATE trabajos_laboratorio SET id_laboratorio=NULL, precio=7000, id_estado_trabajo_laboratorio=1 WHERE id_trabajo_laboratorio=36;
-UPDATE trabajos_laboratorio SET id_laboratorio=6, precio=30000, id_estado_trabajo_laboratorio=3 WHERE id_trabajo_laboratorio=37;
-UPDATE trabajos_laboratorio SET id_laboratorio=1, precio=13000, id_estado_trabajo_laboratorio=2 WHERE id_trabajo_laboratorio=38;
-UPDATE trabajos_laboratorio SET id_laboratorio=3, precio=54000, id_estado_trabajo_laboratorio=2 WHERE id_trabajo_laboratorio=39;
-UPDATE trabajos_laboratorio SET id_laboratorio=2, precio=46000, id_estado_trabajo_laboratorio=2 WHERE id_trabajo_laboratorio=40;
-UPDATE trabajos_laboratorio SET id_laboratorio=2, precio=15000, id_estado_trabajo_laboratorio=3 WHERE id_trabajo_laboratorio=41;
-UPDATE trabajos_laboratorio SET id_laboratorio=3, precio=54000, id_estado_trabajo_laboratorio=4 WHERE id_trabajo_laboratorio=42;
-UPDATE trabajos_laboratorio SET id_laboratorio=2, precio=52000, id_estado_trabajo_laboratorio=2 WHERE id_trabajo_laboratorio=43;
-UPDATE trabajos_laboratorio SET id_laboratorio=5, precio=51000, id_estado_trabajo_laboratorio=2 WHERE id_trabajo_laboratorio=44;
-UPDATE trabajos_laboratorio SET id_laboratorio=NULL, precio=47000, id_estado_trabajo_laboratorio=1 WHERE id_trabajo_laboratorio=45;
-UPDATE trabajos_laboratorio SET id_laboratorio=3, precio=45000, id_estado_trabajo_laboratorio=2 WHERE id_trabajo_laboratorio=46;
-UPDATE trabajos_laboratorio SET id_laboratorio=NULL, precio=7000, id_estado_trabajo_laboratorio=1 WHERE id_trabajo_laboratorio=47;
+UPDATE trabajos_laboratorio SET id_laboratorio=NULL, precio=33000, id_estado_trabajo_laboratorio=1 WHERE id_trabajo_laboratorio=1;
+UPDATE trabajos_laboratorio SET id_laboratorio=2, precio=25000, id_estado_trabajo_laboratorio=2 WHERE id_trabajo_laboratorio=2;
+UPDATE trabajos_laboratorio SET id_laboratorio=NULL, precio=3000, id_estado_trabajo_laboratorio=1 WHERE id_trabajo_laboratorio=3;
+UPDATE trabajos_laboratorio SET id_laboratorio=NULL, precio=10000, id_estado_trabajo_laboratorio=1 WHERE id_trabajo_laboratorio=4;
+UPDATE trabajos_laboratorio SET id_laboratorio=6, precio=23000, id_estado_trabajo_laboratorio=4 WHERE id_trabajo_laboratorio=5;
+UPDATE trabajos_laboratorio SET id_laboratorio=3, precio=18000, id_estado_trabajo_laboratorio=4 WHERE id_trabajo_laboratorio=6;
+UPDATE trabajos_laboratorio SET id_laboratorio=NULL, precio=32000, id_estado_trabajo_laboratorio=1 WHERE id_trabajo_laboratorio=7;
+UPDATE trabajos_laboratorio SET id_laboratorio=NULL, precio=42000, id_estado_trabajo_laboratorio=1 WHERE id_trabajo_laboratorio=8;
+UPDATE trabajos_laboratorio SET id_laboratorio=1, precio=12000, id_estado_trabajo_laboratorio=3 WHERE id_trabajo_laboratorio=9;
+UPDATE trabajos_laboratorio SET id_laboratorio=4, precio=18000, id_estado_trabajo_laboratorio=3 WHERE id_trabajo_laboratorio=10;
+UPDATE trabajos_laboratorio SET id_laboratorio=2, precio=26000, id_estado_trabajo_laboratorio=3 WHERE id_trabajo_laboratorio=11;
+UPDATE trabajos_laboratorio SET id_laboratorio=NULL, precio=14000, id_estado_trabajo_laboratorio=1 WHERE id_trabajo_laboratorio=12;
+UPDATE trabajos_laboratorio SET id_laboratorio=6, precio=11000, id_estado_trabajo_laboratorio=3 WHERE id_trabajo_laboratorio=13;
+UPDATE trabajos_laboratorio SET id_laboratorio=NULL, precio=21000, id_estado_trabajo_laboratorio=1 WHERE id_trabajo_laboratorio=14;
+UPDATE trabajos_laboratorio SET id_laboratorio=2, precio=24000, id_estado_trabajo_laboratorio=2 WHERE id_trabajo_laboratorio=15;
+UPDATE trabajos_laboratorio SET id_laboratorio=4, precio=13000, id_estado_trabajo_laboratorio=4 WHERE id_trabajo_laboratorio=16;
+UPDATE trabajos_laboratorio SET id_laboratorio=3, precio=27000, id_estado_trabajo_laboratorio=2 WHERE id_trabajo_laboratorio=17;
+UPDATE trabajos_laboratorio SET id_laboratorio=1, precio=16000, id_estado_trabajo_laboratorio=4 WHERE id_trabajo_laboratorio=18;
+UPDATE trabajos_laboratorio SET id_laboratorio=3, precio=4000, id_estado_trabajo_laboratorio=4 WHERE id_trabajo_laboratorio=19;
+UPDATE trabajos_laboratorio SET id_laboratorio=4, precio=9000, id_estado_trabajo_laboratorio=3 WHERE id_trabajo_laboratorio=20;
+UPDATE trabajos_laboratorio SET id_laboratorio=NULL, precio=24000, id_estado_trabajo_laboratorio=1 WHERE id_trabajo_laboratorio=21;
+UPDATE trabajos_laboratorio SET id_laboratorio=3, precio=11000, id_estado_trabajo_laboratorio=2 WHERE id_trabajo_laboratorio=22;
+UPDATE trabajos_laboratorio SET id_laboratorio=1, precio=8000, id_estado_trabajo_laboratorio=4 WHERE id_trabajo_laboratorio=23;
+UPDATE trabajos_laboratorio SET id_laboratorio=NULL, precio=12000, id_estado_trabajo_laboratorio=1 WHERE id_trabajo_laboratorio=24;
+UPDATE trabajos_laboratorio SET id_laboratorio=4, precio=25000, id_estado_trabajo_laboratorio=2 WHERE id_trabajo_laboratorio=25;
+UPDATE trabajos_laboratorio SET id_laboratorio=3, precio=21000, id_estado_trabajo_laboratorio=4 WHERE id_trabajo_laboratorio=26;
+UPDATE trabajos_laboratorio SET id_laboratorio=4, precio=2000, id_estado_trabajo_laboratorio=4 WHERE id_trabajo_laboratorio=27;
+UPDATE trabajos_laboratorio SET id_laboratorio=3, precio=12000, id_estado_trabajo_laboratorio=4 WHERE id_trabajo_laboratorio=28;
+UPDATE trabajos_laboratorio SET id_laboratorio=4, precio=9000, id_estado_trabajo_laboratorio=3 WHERE id_trabajo_laboratorio=29;
+UPDATE trabajos_laboratorio SET id_laboratorio=3, precio=15000, id_estado_trabajo_laboratorio=3 WHERE id_trabajo_laboratorio=30;
+UPDATE trabajos_laboratorio SET id_laboratorio=2, precio=32000, id_estado_trabajo_laboratorio=4 WHERE id_trabajo_laboratorio=31;
+UPDATE trabajos_laboratorio SET id_laboratorio=NULL, precio=24000, id_estado_trabajo_laboratorio=1 WHERE id_trabajo_laboratorio=32;
+UPDATE trabajos_laboratorio SET id_laboratorio=5, precio=18000, id_estado_trabajo_laboratorio=3 WHERE id_trabajo_laboratorio=33;
+UPDATE trabajos_laboratorio SET id_laboratorio=NULL, precio=21000, id_estado_trabajo_laboratorio=1 WHERE id_trabajo_laboratorio=34;
+UPDATE trabajos_laboratorio SET id_laboratorio=3, precio=20000, id_estado_trabajo_laboratorio=4 WHERE id_trabajo_laboratorio=35;
+UPDATE trabajos_laboratorio SET id_laboratorio=NULL, precio=5000, id_estado_trabajo_laboratorio=1 WHERE id_trabajo_laboratorio=36;
+UPDATE trabajos_laboratorio SET id_laboratorio=6, precio=15000, id_estado_trabajo_laboratorio=3 WHERE id_trabajo_laboratorio=37;
+UPDATE trabajos_laboratorio SET id_laboratorio=1, precio=7000, id_estado_trabajo_laboratorio=2 WHERE id_trabajo_laboratorio=38;
+UPDATE trabajos_laboratorio SET id_laboratorio=3, precio=23000, id_estado_trabajo_laboratorio=2 WHERE id_trabajo_laboratorio=39;
+UPDATE trabajos_laboratorio SET id_laboratorio=2, precio=20000, id_estado_trabajo_laboratorio=2 WHERE id_trabajo_laboratorio=40;
+UPDATE trabajos_laboratorio SET id_laboratorio=2, precio=9000, id_estado_trabajo_laboratorio=3 WHERE id_trabajo_laboratorio=41;
+UPDATE trabajos_laboratorio SET id_laboratorio=3, precio=24000, id_estado_trabajo_laboratorio=4 WHERE id_trabajo_laboratorio=42;
+UPDATE trabajos_laboratorio SET id_laboratorio=2, precio=21000, id_estado_trabajo_laboratorio=2 WHERE id_trabajo_laboratorio=43;
+UPDATE trabajos_laboratorio SET id_laboratorio=5, precio=20000, id_estado_trabajo_laboratorio=2 WHERE id_trabajo_laboratorio=44;
+UPDATE trabajos_laboratorio SET id_laboratorio=NULL, precio=19000, id_estado_trabajo_laboratorio=1 WHERE id_trabajo_laboratorio=45;
+UPDATE trabajos_laboratorio SET id_laboratorio=3, precio=18000, id_estado_trabajo_laboratorio=2 WHERE id_trabajo_laboratorio=46;
+UPDATE trabajos_laboratorio SET id_laboratorio=NULL, precio=6000, id_estado_trabajo_laboratorio=1 WHERE id_trabajo_laboratorio=47;
 
 -- VISTAS --
 
 -- VISTA 1
--- Nos permite ver la historia clínica de un paciente si se rstringe la vista por numero de documento (por ejemplo)
+-- Nos permite ver la historia clínica de un paciente si se retringe la vista por numero de documento (por ejemplo)
 
 CREATE OR REPLACE VIEW historia_clinica AS (
-	SELECT t.fecha, t.hora, p.documento, e.descripcion, em.apellido AS 'odontologo'
+	SELECT t.fecha, t.hora, p.documento, e.descripcion, em.apellido AS 'odontologo', tl.precio AS 'costo_laboratorio', lb.nombre AS 'laboratorio'
 	FROM evoluciones e
 	JOIN turnos t ON e.id_turno = t.id_turno
-    JOIN empleados em ON em.id_empleado = e.id_empleado
-	JOIN pacientes p ON e.id_paciente = p.id_paciente
+	JOIN empleados em ON em.id_empleado = e.id_empleado
+	JOIN pacientes p ON t.id_paciente = p.id_paciente
+	LEFT JOIN trabajos_laboratorio tl ON e.id_trabajo_laboratorio = tl.id_trabajo_laboratorio
+	LEFT JOIN laboratorios lb ON tl.id_laboratorio = lb.id_laboratorio
 	ORDER BY fecha, hora
 );
 
 -- Ejemplo de extraer la historia clínica de un paciente
 
--- SELECT fecha, hora, documento, odontologo, descripcion 
+-- SELECT *
 -- FROM historia_clinica
 -- WHERE documento = '18895062';
 
@@ -947,8 +1633,8 @@ CREATE OR REPLACE VIEW agenda AS (
     FROM turnos tu
     JOIN pacientes p ON tu.id_paciente = p.id_paciente
     JOIN empleados e ON tu.id_empleado = e.id_empleado
-    WHERE id_estado_turno = 2 -- Los turnos que todavia no sucedieron
-    AND id_tratamiento IS NULL -- Ignoro los turnos que corresponden a estudios radiológicos
+    WHERE tu.id_estado_turno = 3 -- Los turnos que todavia no sucedieron
+    AND tu.id_tratamiento IS NULL -- Ignoro los turnos que corresponden a estudios radiológicos
     ORDER BY fecha, hora
 );
 
@@ -957,11 +1643,12 @@ CREATE OR REPLACE VIEW agenda AS (
 -- SELECT fecha, hora, paciente, documento, contacto 
 -- FROM agenda
 -- WHERE odontologo = 'Lillian'
--- AND fecha = '2022-12-13';
+-- AND fecha = '2022-02-12';
 
 -- Ejemplo de extraer la agenda de un odontólogo para una semana en particular
 
--- SELECT fecha, hora, paciente, documento, contacto FROM agenda
+-- SELECT fecha, hora, paciente, documento, contacto 
+-- FROM agenda
 -- WHERE odontologo = 'Lillian'
 -- AND WEEK(fecha) = 48;
 
@@ -973,7 +1660,7 @@ CREATE OR REPLACE VIEW agenda_radiologica AS (
     FROM turnos tu
     JOIN pacientes p ON tu.id_paciente = p.id_paciente
     JOIN tratamientos tr ON tu.id_tratamiento = tr.id_tratamiento
-    WHERE id_estado_turno = 2 -- Los turnos que todavia no sucedieron
+    WHERE id_estado_turno = 3 -- Los turnos que todavia no sucedieron
     AND tu.id_empleado IS NULL -- Sólo los turnos para radiológicos
     ORDER BY fecha, hora
 );
@@ -1075,3 +1762,15 @@ CREATE OR REPLACE VIEW facturacion_odontologo AS (
 -- GROUP BY tratamiento;
 
 -- Este ultimo es facil de restringir para ver la facturacion desglosada en un período determinado
+
+-- VISTA 7
+-- Me permite ver los productos con bajo stock, recomenando una cantidad a pedir.
+
+CREATE OR REPLACE VIEW bajo_stock AS (
+	SELECT st.nombre, st.variedad, CONCAT(st.cantidad, ' ', st.presentacion) AS 'stock_actual', CONCAT(st.cantidad_recomendada, ' ', st.presentacion) AS 'pedido_recomendado' 
+    FROM stock st
+    WHERE cantidad <= cantidad_minima
+    ORDER BY st.nombre
+);
+
+-- Se puede modificar facilmente para generar otro formato de tablapara exportar pedidos directamente
